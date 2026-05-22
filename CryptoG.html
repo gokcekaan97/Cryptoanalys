@@ -1,0 +1,3089 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Futures Çoklu Zaman Dilimi Analizi</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0a0f; --panel: #12121a; --panel-2: #181822;
+    --border: #23232f; --text: #e5e5ef; --muted: #8a8a99;
+    --bull: #10b981; --bear: #ef4444; --neut: #94a3b8;
+    --warn: #f59e0b; --info: #22d3ee; --accent: #fbbf24;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: radial-gradient(ellipse at top, #14141f 0%, var(--bg) 60%);
+    color: var(--text); font-family: 'Space Grotesk', sans-serif; min-height: 100vh; padding: 16px; }
+  header { margin-bottom: 14px; padding-bottom: 12px; border-bottom: 1px solid var(--border); }
+  h1 { font-size: 22px; margin: 0 0 8px; letter-spacing: -0.5px; font-weight: 700; }
+  h1 span { color: var(--accent); }
+  .sub { color: var(--muted); font-size: 12.5px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  .status { display: inline-flex; align-items: center; gap: 6px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--bull); box-shadow: 0 0 8px var(--bull); animation: pulse 1.6s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+  button.refresh { background: var(--accent); color: #0a0a0f; border: none; padding: 6px 12px; border-radius: 6px; font-weight: 700; cursor: pointer; font-family: inherit; font-size: 12px; }
+  button.refresh:hover { filter: brightness(1.1); }
+
+  .manager { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 12px; margin-bottom: 14px; }
+  .manager-head { display: flex; justify-content: space-between; align-items: center; cursor: pointer; user-select: none; }
+  .manager-head .lbl { font-size: 13px; font-weight: 700; }
+  .manager-head .count { color: var(--muted); font-size: 12px; font-weight: 400; }
+  .manager-body { display: none; margin-top: 10px; }
+  .manager.open .manager-body { display: block; }
+  .manager.open .arrow { transform: rotate(180deg); }
+  .arrow { display: inline-block; transition: transform .2s; color: var(--muted); }
+  .add-row { display: flex; gap: 6px; margin-bottom: 10px; }
+  .add-row input { flex: 1; background: var(--panel-2); border: 1px solid var(--border); color: var(--text); padding: 9px 11px; border-radius: 6px; font-family: 'JetBrains Mono', monospace; font-size: 13px; text-transform: uppercase; }
+  .add-row input:focus { outline: none; border-color: var(--accent); }
+  .add-row button { background: var(--accent); color: #0a0a0f; border: none; padding: 0 14px; border-radius: 6px; font-weight: 700; cursor: pointer; font-family: inherit; font-size: 12px; }
+  .chip-section { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .8px; margin: 6px 0 4px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+  .chip { background: var(--panel-2); border: 1px solid var(--border); border-radius: 999px; padding: 4px 4px 4px 10px; display: inline-flex; align-items: center; gap: 6px; font-family: 'JetBrains Mono', monospace; font-size: 12px; }
+  .chip.top { border-color: rgba(251,191,36,.3); }
+  .chip.top::before { content: "🔥"; font-size: 10px; }
+  .chip.user { border-color: rgba(34,211,238,.3); }
+  .chip .x { background: rgba(239,68,68,.15); color: var(--bear); border: none; border-radius: 50%; width: 18px; height: 18px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; font-size: 14px; line-height: 1; font-family: inherit; }
+  .chip .x:hover { background: var(--bear); color: white; }
+  .hint { font-size: 11px; color: var(--muted); margin-top: 8px; }
+
+  .tabs { display: flex; gap: 6px; margin-bottom: 12px; flex-wrap: wrap; }
+  .tab { background: var(--panel); border: 1px solid var(--border); color: var(--muted); padding: 8px 14px; border-radius: 8px; cursor: pointer; font-family: inherit; font-size: 13px; font-weight: 500; transition: all .15s; }
+  .tab:hover { color: var(--text); border-color: #2f2f3f; }
+  .tab.active { background: var(--accent); color: #0a0a0f; border-color: var(--accent); font-weight: 700; }
+
+  .summary { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; margin-bottom: 12px; font-size: 12.5px; line-height: 1.5; }
+  .summary strong { color: var(--accent); }
+
+  .bar { height: 4px; background: var(--border); border-radius: 2px; overflow: hidden; margin-bottom: 10px; }
+  .bar-fill { height: 100%; background: var(--accent); transition: width .2s; }
+
+  .grid { display: grid; grid-template-columns: 1fr; gap: 10px; }
+  .card { background: linear-gradient(180deg, var(--panel) 0%, var(--panel-2) 100%); border: 1px solid var(--border); border-radius: 12px; padding: 14px; position: relative; overflow: hidden; }
+  .card::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--side, var(--neut)); }
+  .row1 { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 4px; gap: 8px; }
+  .sym-wrap { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; }
+  .sym { font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 16px; letter-spacing: -.3px; }
+  .src-badge { font-size: 9px; color: var(--muted); border: 1px solid var(--border); padding: 1px 5px; border-radius: 3px; text-transform: uppercase; letter-spacing: .5px; }
+  .price { font-family: 'JetBrains Mono', monospace; font-size: 15px; font-weight: 500; text-align: right; }
+  .price-sub { font-size: 11px; font-family: 'JetBrains Mono', monospace; }
+
+  .score-block {
+    background: var(--panel-2); border-radius: 8px; padding: 10px;
+    margin-bottom: 10px; display: flex; align-items: center; gap: 12px;
+    border: 1px solid var(--border);
+  }
+  .score-num {
+    font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 26px;
+    line-height: 1; min-width: 56px;
+  }
+  .score-bar-wrap { flex: 1; }
+  .score-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .6px; margin-bottom: 4px; display: flex; justify-content: space-between; }
+  .score-label .sig-tag { padding: 1px 6px; border-radius: 3px; font-size: 10px; font-weight: 700; }
+  .score-bar { height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; }
+  .score-fill { height: 100%; border-radius: 3px; transition: width .3s; }
+
+  .row2 { display: flex; justify-content: space-between; font-size: 11.5px; color: var(--muted); margin-bottom: 12px; }
+  .comment {
+    background: rgba(251,191,36,.05);
+    border-left: 2px solid var(--accent);
+    border-radius: 0 6px 6px 0;
+    padding: 8px 10px;
+    margin-bottom: 10px;
+    font-size: 12px;
+    line-height: 1.45;
+    color: #cfcfd9;
+  }
+  .comment-lbl {
+    font-size: 9px; color: var(--accent); text-transform: uppercase;
+    letter-spacing: .8px; font-weight: 700; margin-bottom: 3px;
+    display: block;
+  }
+  .chg-bull { color: var(--bull); } .chg-bear { color: var(--bear); }
+  .metrics { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+  .m { background: rgba(255,255,255,.02); border: 1px solid rgba(255,255,255,.04); border-radius: 8px; padding: 9px 10px; }
+  .m .lbl { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .6px; margin-bottom: 4px; }
+  .m .val { font-size: 13px; font-weight: 600; }
+  .m .sub-val { font-size: 11px; color: var(--muted); margin-top: 2px; font-family: 'JetBrains Mono', monospace; }
+  .sig { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; letter-spacing: .3px; }
+  .sig.LONG { background: rgba(16,185,129,.15); color: var(--bull); }
+  .sig.SHORT { background: rgba(239,68,68,.15); color: var(--bear); }
+  .sig.NÖTR, .sig.BEKLE { background: rgba(148,163,184,.15); color: var(--neut); }
+  .sig.AŞIRI-ALIM { background: rgba(245,158,11,.15); color: var(--warn); }
+  .sig.AŞIRI-SATIM { background: rgba(34,211,238,.15); color: var(--info); }
+  .err { color: var(--bear); font-size: 11px; margin-top: 6px; }
+  .loading { text-align: center; padding: 30px 20px; color: var(--muted); grid-column: 1 / -1; }
+  .empty { text-align: center; padding: 30px; color: var(--muted); border: 1px dashed var(--border); border-radius: 10px; }
+
+  @media (min-width: 720px) { body { padding: 24px; max-width: 1400px; margin: 0 auto; } .grid { grid-template-columns: repeat(2, 1fr); } .metrics { grid-template-columns: repeat(4, 1fr); } }
+  @media (min-width: 1100px) { .grid { grid-template-columns: repeat(3, 1fr); } }
+
+  /* Page tabs */
+  .page-tabs { display: flex; gap: 4px; margin-top: 12px; border-bottom: 1px solid var(--border); }
+  .page-tab {
+    background: transparent; border: none; color: var(--muted);
+    padding: 10px 16px; cursor: pointer; font-family: inherit;
+    font-size: 13px; font-weight: 600; border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+  }
+  .page-tab:hover { color: var(--text); }
+  .page-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+  .page { display: none; }
+  .page.active { display: block; }
+
+  /* Scanner page */
+  .scanner-stats {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 10px; padding: 12px; margin-bottom: 14px;
+    font-size: 12.5px; line-height: 1.6;
+  }
+  .scanner-stats .stat-row { display: flex; justify-content: space-between; padding: 3px 0; }
+  .scanner-stats .label { color: var(--muted); }
+  .scanner-stats .value { font-weight: 600; font-family: 'JetBrains Mono', monospace; }
+
+  .opp-card {
+    background: linear-gradient(180deg, var(--panel) 0%, var(--panel-2) 100%);
+    border: 1px solid var(--border); border-radius: 12px;
+    padding: 14px; margin-bottom: 10px; position: relative;
+    border-left: 4px solid var(--bull);
+  }
+  .opp-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 10px; gap: 8px; }
+  .opp-sym { font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 17px; }
+  .opp-rank {
+    background: var(--accent); color: #0a0a0f; padding: 2px 8px;
+    border-radius: 4px; font-weight: 700; font-size: 11px;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .opp-scores { display: flex; gap: 8px; margin-bottom: 12px; }
+  .opp-score-pill {
+    flex: 1; background: var(--panel-2); border: 1px solid var(--border);
+    border-radius: 8px; padding: 8px; text-align: center;
+  }
+  .opp-score-pill .lbl { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .6px; }
+  .opp-score-pill .num { font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 18px; margin-top: 2px; }
+
+  .trade-plan {
+    background: rgba(16,185,129,.05);
+    border: 1px solid rgba(16,185,129,.2);
+    border-radius: 8px; padding: 10px; margin-bottom: 10px;
+  }
+  .trade-plan-title {
+    font-size: 10px; color: var(--bull); text-transform: uppercase;
+    letter-spacing: .8px; font-weight: 700; margin-bottom: 6px;
+  }
+  .trade-row {
+    display: flex; justify-content: space-between; padding: 3px 0;
+    font-family: 'JetBrains Mono', monospace; font-size: 12.5px;
+  }
+  .trade-row .k { color: var(--muted); }
+  .trade-row .v { font-weight: 600; }
+
+  .risk-badge {
+    display: inline-block; padding: 2px 8px; border-radius: 4px;
+    font-size: 10px; font-weight: 700; letter-spacing: .3px;
+  }
+  .risk-low { background: rgba(16,185,129,.15); color: var(--bull); }
+  .risk-med { background: rgba(245,158,11,.15); color: var(--warn); }
+  .risk-high { background: rgba(239,68,68,.15); color: var(--bear); }
+
+  .scan-progress {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 10px; padding: 16px; margin-bottom: 14px; text-align: center;
+  }
+  .scan-progress .step { font-size: 13px; color: var(--text); margin-bottom: 8px; }
+  .scan-progress .detail { font-size: 11px; color: var(--muted); font-family: 'JetBrains Mono', monospace; }
+
+  .manual-analyzer {
+    background: var(--panel); border: 1px solid var(--accent);
+    border-radius: 10px; padding: 12px; margin-bottom: 14px;
+  }
+  .manual-head {
+    font-size: 14px; font-weight: 700; color: var(--accent);
+    margin-bottom: 10px;
+  }
+
+  .archive-section {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 10px; padding: 12px;
+  }
+  .archive-head {
+    display: flex; justify-content: space-between; align-items: center;
+    cursor: pointer; user-select: none;
+  }
+  .archive-head .lbl { font-size: 13px; font-weight: 700; }
+  .archive-head .count { color: var(--muted); font-size: 12px; font-weight: 400; }
+  .archive-body { display: none; margin-top: 10px; }
+  .archive-section.open .archive-body { display: block; }
+  .archive-section.open .arrow { transform: rotate(180deg); }
+
+  .archive-item {
+    background: var(--panel-2); border: 1px solid var(--border);
+    border-radius: 8px; padding: 10px 12px; margin-bottom: 6px;
+    display: flex; justify-content: space-between; align-items: center;
+    cursor: pointer; transition: border-color .15s;
+  }
+  .archive-item:hover { border-color: var(--accent); }
+  .archive-item.manual { border-left: 3px solid var(--accent); }
+  .archive-item.scan { border-left: 3px solid var(--info); }
+  .archive-item .left { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+  .archive-item .row-top { display: flex; align-items: center; gap: 6px; }
+  .archive-item .sym { font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 13px; }
+  .archive-item .time { font-size: 10.5px; color: var(--muted); }
+  .archive-item .right { display: flex; gap: 8px; align-items: center; flex-shrink: 0; }
+  .archive-item .score { font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 14px; }
+  .archive-item .pass-tag {
+    font-size: 9px; padding: 2px 6px; border-radius: 3px;
+    text-transform: uppercase; letter-spacing: .4px; font-weight: 700;
+  }
+  .type-badge {
+    font-size: 9px; padding: 2px 6px; border-radius: 3px;
+    text-transform: uppercase; letter-spacing: .4px; font-weight: 700;
+  }
+  .manual-badge { background: rgba(251,191,36,.15); color: var(--accent); }
+  .scan-badge { background: rgba(34,211,238,.15); color: var(--info); }
+  .archive-item .del-btn {
+    background: rgba(239,68,68,.15); color: var(--bear); border: none;
+    border-radius: 50%; width: 22px; height: 22px; cursor: pointer;
+    font-size: 14px; line-height: 1; display: inline-flex; align-items: center; justify-content: center;
+  }
+  .archive-item .del-btn:hover { background: var(--bear); color: white; }
+
+  .archive-filters {
+    display: flex; gap: 6px; margin-bottom: 10px; flex-wrap: wrap;
+  }
+  .filter-btn {
+    background: var(--panel-2); border: 1px solid var(--border);
+    color: var(--muted); padding: 5px 10px; border-radius: 6px;
+    font-family: inherit; font-size: 11px; font-weight: 600; cursor: pointer;
+  }
+  .filter-btn:hover { color: var(--text); }
+  .filter-btn.active {
+    background: var(--accent); color: #0a0a0f; border-color: var(--accent);
+  }
+
+  /* Failed criteria detail box */
+  .criteria-detail {
+    background: rgba(255,255,255,.02); border: 1px solid var(--border);
+    border-radius: 8px; padding: 10px 12px; margin-top: 10px;
+  }
+
+  /* Overall comment box */
+  .overall-comment {
+    background: rgba(251,191,36,.06);
+    border: 1px solid rgba(251,191,36,.25);
+    border-radius: 8px; padding: 12px 14px; margin-top: 12px;
+  }
+  .overall-comment-title {
+    font-size: 11px; color: var(--accent); text-transform: uppercase;
+    letter-spacing: .7px; font-weight: 700; margin-bottom: 6px;
+  }
+  .overall-comment-body {
+    font-size: 13px; line-height: 1.55; color: #d8d8e2;
+  }
+
+  /* Per-timeframe analysis blocks */
+  .tf-grid {
+    display: grid; grid-template-columns: 1fr; gap: 8px; margin-top: 12px;
+  }
+  .tf-block {
+    background: var(--panel-2); border: 1px solid var(--border);
+    border-radius: 8px; padding: 10px 12px;
+  }
+  .tf-head {
+    display: flex; justify-content: space-between; align-items: baseline;
+    margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1px solid var(--border);
+  }
+  .tf-label { font-size: 12px; font-weight: 700; color: var(--accent); }
+  .tf-score { font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 18px; }
+  .tf-metrics {
+    display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px 10px;
+    margin-bottom: 8px; font-size: 11.5px;
+  }
+  .tf-m { display: flex; justify-content: space-between; padding: 2px 0; }
+  .tf-m .k { color: var(--muted); }
+  .tf-comment {
+    background: rgba(251,191,36,.05);
+    border-left: 2px solid var(--accent);
+    padding: 6px 8px; font-size: 11.5px; line-height: 1.4;
+    color: #cfcfd9; border-radius: 0 4px 4px 0;
+  }
+  @media (min-width: 720px) {
+    .tf-grid { grid-template-columns: repeat(2, 1fr); }
+    .tf-metrics { grid-template-columns: repeat(2, 1fr); }
+  }
+  @media (min-width: 1100px) {
+    .tf-grid { grid-template-columns: repeat(4, 1fr); }
+  }
+  .criteria-detail-title {
+    font-size: 11px; color: var(--muted); text-transform: uppercase;
+    letter-spacing: .6px; font-weight: 700; margin-bottom: 8px;
+  }
+  .crit-row {
+    display: grid; grid-template-columns: auto 1fr auto; gap: 10px;
+    align-items: center; padding: 4px 0;
+    font-size: 12px; border-bottom: 1px solid rgba(255,255,255,.03);
+  }
+  .crit-row:last-child { border-bottom: none; }
+  .crit-row .icon { font-size: 13px; }
+  .crit-row .name { color: var(--text); }
+  .crit-row .value { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--muted); }
+  .crit-row.fail .value { color: var(--bear); }
+  .crit-row.pass .value { color: var(--bull); }
+
+  .criteria-list {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 10px; padding: 12px; margin-bottom: 14px; font-size: 12px;
+  }
+  .criteria-list strong { color: var(--accent); }
+  .criteria-list ul { margin: 6px 0 0; padding-left: 18px; color: var(--muted); }
+  .criteria-list li { margin: 2px 0; }
+
+  .levels-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
+    margin-bottom: 10px;
+  }
+  .levels-col {
+    background: var(--panel-2); border: 1px solid var(--border);
+    border-radius: 8px; padding: 8px 10px;
+  }
+  .levels-title {
+    font-size: 10px; text-transform: uppercase; letter-spacing: .6px;
+    font-weight: 700; margin-bottom: 6px;
+  }
+  .res-title { color: var(--bear); }
+  .sup-title { color: var(--bull); }
+  .level-row {
+    display: grid; grid-template-columns: 1fr auto auto; gap: 6px;
+    align-items: center; padding: 2px 0;
+    font-family: 'JetBrains Mono', monospace; font-size: 11.5px;
+  }
+  .level-row .dist { color: var(--muted); font-size: 10.5px; }
+  .level-row .strength { color: var(--accent); font-size: 8px; letter-spacing: -1px; }
+  .level-row.sup { color: var(--bull); }
+  .level-row.res { color: var(--bear); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Futures <span>Çoklu TF</span> Analizi</h1>
+  <div class="sub">
+    <span class="status"><span class="dot"></span>Binance Futures</span>
+    <span id="updated">—</span>
+    <button class="refresh" id="refreshBtn" onclick="loadCurrentPage()">↻ Yenile</button>
+    <button class="refresh" style="background:transparent;color:var(--muted);border:1px solid var(--border)" onclick="openProxySettings()">⚙️ Proxy</button>
+    <span id="rateLimitNote" style="display:none;background:rgba(245,158,11,.15);color:var(--warn);padding:3px 8px;border-radius:4px;font-size:11px;font-weight:600"></span>
+  </div>
+  <div class="page-tabs">
+    <button class="page-tab active" data-page="watch">📊 İzleme</button>
+    <button class="page-tab" data-page="scanner">🎯 LONG</button>
+    <button class="page-tab" data-page="shortScanner">🩸 SHORT</button>
+    <button class="page-tab" data-page="manual">🔍 Manuel</button>
+  </div>
+</header>
+
+<div class="page active" id="page-watch">
+  <div class="manager" id="manager">
+    <div class="manager-head" onclick="toggleManager()">
+      <span class="lbl">Coinler <span class="count" id="coinCount"></span></span>
+      <span class="arrow">▼</span>
+    </div>
+    <div class="manager-body">
+      <div class="add-row">
+        <input id="newCoin" placeholder="örn: SOLUSDT veya SOL" autocomplete="off" />
+        <button onclick="addCoin()">+ Ekle</button>
+      </div>
+      <div class="chip-section">🔥 Top 10 (24s yükseliş — yenilenince güncellenir)</div>
+      <div class="chips" id="chipsTop"></div>
+      <div class="chip-section">📌 Eklediklerin (kalıcı)</div>
+      <div class="chips" id="chipsUser"></div>
+      <div class="hint">Yenile → Binance Futures'tan en çok yükselen 10 coin gelir. Eklediğin coinler her zaman korunur.</div>
+    </div>
+  </div>
+
+  <div class="tabs" id="tabs"></div>
+  <div class="summary" id="summary">Yükleniyor…</div>
+  <div class="bar" id="progressBar" style="display:none"><div class="bar-fill" id="progressFill" style="width:0%"></div></div>
+  <div class="grid" id="grid"><div class="loading">Yükleniyor…</div></div>
+</div>
+
+<div class="page" id="page-scanner">
+  <div class="criteria-list">
+    <strong>🎯 LONG Fırsat Tarayıcısı</strong> — Pump'lamamış, dip yapmış ama dönüş sinyali veren coinleri yakalar.
+    <ul>
+      <li>1Days, 5minute, 1minute trend yukarı (büyük resim sağlam)</li>
+      <li>5m RSI &lt; 65 (aşırı alımda değil)</li>
+      <li>Bull formasyon var (engulfing, çekiç, çanak v.b.)</li>
+      <li>Hacim normal veya yüksek</li>
+      <li>Son 24s yükseliş &lt; %10 (pump etmemiş)</li>
+      <li>1minute ve 5m skor ≥ 65</li>
+    </ul>
+  </div>
+  <div id="scannerStats"></div>
+  <div id="scannerProgress" style="display:none"></div>
+  <div id="opportunities"></div>
+
+  <div class="archive-section" id="archiveSectionScanner" style="margin-top:16px">
+    <div class="archive-head" onclick="toggleArchiveSection('archiveSectionScanner')">
+      <span class="lbl">📚 Arşiv <span class="count" id="archiveCountScanner"></span></span>
+      <div style="display:flex;gap:8px;align-items:center">
+        <button class="refresh" style="background:transparent;color:var(--muted);border:1px solid var(--border);padding:4px 8px;font-size:11px" onclick="clearArchive(event)">Temizle</button>
+        <span class="arrow">▼</span>
+      </div>
+    </div>
+    <div class="archive-body" id="archiveBodyScanner"></div>
+  </div>
+</div>
+
+<div class="page" id="page-shortScanner">
+  <div class="criteria-list" style="border-color:rgba(239,68,68,.3)">
+    <strong style="color:var(--bear)">🩸 SHORT Fırsat Tarayıcısı</strong> — Aşırı greed'de pump'lamış, momentum tükenen coinleri yakalar.
+    <ul>
+      <li>1D trend aşağı veya zayıflıyor</li>
+      <li>5m RSI > 70 (aşırı alım, satıcılar girmek üzere)</li>
+      <li>Bear formasyon var (engulfing, kayan yıldız, vb.)</li>
+      <li>Son 24s yükseliş > %8 (pump etmiş, balon)</li>
+      <li>1D ve 5m SHORT skor ≥ 65</li>
+      <li>Fear & Greed: Greed/Extreme Greed bölgesi</li>
+    </ul>
+  </div>
+  <div id="fearGreedBanner"></div>
+  <div id="shortScannerStats"></div>
+  <div id="shortScannerProgress" style="display:none"></div>
+  <div id="shortOpportunities"></div>
+
+  <div class="archive-section" id="archiveSectionShortScanner" style="margin-top:16px">
+    <div class="archive-head" onclick="toggleArchiveSection('archiveSectionShortScanner')">
+      <span class="lbl">📚 Arşiv <span class="count" id="archiveCountShortScanner"></span></span>
+      <div style="display:flex;gap:8px;align-items:center">
+        <button class="refresh" style="background:transparent;color:var(--muted);border:1px solid var(--border);padding:4px 8px;font-size:11px" onclick="clearArchive(event)">Temizle</button>
+        <span class="arrow">▼</span>
+      </div>
+    </div>
+    <div class="archive-body" id="archiveBodyShortScanner"></div>
+  </div>
+</div>
+
+<div class="page" id="page-manual">
+  <div class="manual-analyzer">
+    <div class="manual-head">🔍 Manuel Coin Analizi</div>
+    <div class="add-row">
+      <input id="manualCoin" placeholder="örn: BTCUSDT, SOLUSDT, AVAX..." autocomplete="off" />
+      <button onclick="analyzeManualCoin()">Analiz Et</button>
+    </div>
+    <div class="hint">Kriterleri geçmese bile detaylı analiz alırsın. Tüm analizler arşivlenir.</div>
+    <div id="manualResult"></div>
+  </div>
+
+  <div class="archive-section" id="archiveSectionManual">
+    <div class="archive-head" onclick="toggleArchiveSection('archiveSectionManual')">
+      <span class="lbl">📚 Arşiv <span class="count" id="archiveCountManual"></span></span>
+      <div style="display:flex;gap:8px;align-items:center">
+        <button class="refresh" style="background:transparent;color:var(--muted);border:1px solid var(--border);padding:4px 8px;font-size:11px" onclick="clearArchive(event)">Temizle</button>
+        <span class="arrow">▼</span>
+      </div>
+    </div>
+    <div class="archive-body" id="archiveBodyManual"></div>
+  </div>
+</div>
+
+<script>
+const INTERVALS = ["1m","3m","5m","1d"];
+const LABELS = {"1m":"1 Dakika","3m":"3 Dakika","5m":"5 Dakika","1d":"1 Gün"};
+const TOP_N = 10;
+
+let TOP_MOVERS = [];
+let TOP_MOVERS_DATA = [];
+let USER_ADDED = [];
+let SYMBOLS = [];
+let DATA = {};
+let activeInt = "5m";
+let sortMode = "default"; // "default" (24s sırası) veya "score" (skora göre)
+
+try {
+  const s = localStorage.getItem('userAddedSymbols');
+  USER_ADDED = s ? JSON.parse(s) : [];
+} catch(e) { USER_ADDED = []; }
+
+function saveUserAdded() { try { localStorage.setItem('userAddedSymbols', JSON.stringify(USER_ADDED)); } catch(e) {} }
+
+function rebuildSymbols() {
+  const seen = new Set();
+  SYMBOLS = [];
+  for (const s of [...TOP_MOVERS, ...USER_ADDED]) {
+    if (!seen.has(s)) { seen.add(s); SYMBOLS.push(s); }
+  }
+}
+
+// ── Indicators ─────────────────────────────────────────────
+function ema(arr, period) {
+  if (arr.length < period) return null;
+  const k = 2/(period+1);
+  let e = arr.slice(0,period).reduce((a,b)=>a+b,0)/period;
+  for (let i=period; i<arr.length; i++) e = arr[i]*k + e*(1-k);
+  return e;
+}
+function rsi(closes, period=14) {
+  if (closes.length < period+1) return null;
+  let g=0, l=0;
+  for (let i=closes.length-period; i<closes.length; i++) {
+    const d = closes[i]-closes[i-1];
+    if (d>0) g+=d; else l+=-d;
+  }
+  if (l===0) return 100;
+  return +(100 - 100/(1+g/l)).toFixed(1);
+}
+function pattern(c) {
+  if (c.length<2) return {l:"—",s:"neutral"};
+  const cur=c.at(-1), prv=c.at(-2);
+  const o=cur.o, h=cur.h, lo=cur.l, cl=cur.c;
+  const po=prv.o, pc=prv.c;
+  const body=Math.abs(cl-o), range=h-lo||1e-9;
+  const up=h-Math.max(o,cl), dn=Math.min(o,cl)-lo;
+  if (body/range<0.08) return {l:"Doji",s:"neutral"};
+  if (dn>body*2.2 && up<body*0.5 && cl>=o) return {l:"Çekiç",s:"bull"};
+  if (up>body*2.2 && dn<body*0.5 && cl<=o) return {l:"Kayan Yıldız",s:"bear"};
+  if (pc<po && cl>o && cl>=po && o<=pc) return {l:"Bull Engulfing",s:"bull"};
+  if (pc>po && cl<o && cl<=po && o>=pc) return {l:"Bear Engulfing",s:"bear"};
+  if (cl>o && body/range>0.72) return {l:"Güçlü Yeşil",s:"bull"};
+  if (cl<o && body/range>0.72) return {l:"Güçlü Kırmızı",s:"bear"};
+  if (up>body && dn>body) return {l:"Spinning Top",s:"neutral"};
+  return cl>o ? {l:"Yükseliş",s:"bull"} : {l:"Düşüş",s:"bear"};
+}
+function trend(c) {
+  if (c.length<21) return {l:"—",d:"neutral"};
+  const cl = c.map(x=>x.c);
+  const e9 = ema(cl,9), e21 = ema(cl,21);
+  if (!e9||!e21) return {l:"—",d:"neutral"};
+  const last = cl.at(-1);
+  const diff = (e9-e21)/e21;
+  if (last>e9 && e9>e21 && diff>0.003) return {l:"↑ Güçlü Yükseliş",d:"bull",strength:2};
+  if (last<e9 && e9<e21 && diff<-0.003) return {l:"↓ Güçlü Düşüş",d:"bear",strength:2};
+  if (Math.abs(diff)<0.0012) return {l:"→ Yatay",d:"neutral",strength:0};
+  if (e9>e21) return {l:"↗ Hafif Yükseliş",d:"bull",strength:1};
+  return {l:"↘ Hafif Düşüş",d:"bear",strength:1};
+}
+function volTrend(c) {
+  if (c.length<6) return {l:"—",mult:1};
+  const v = c.slice(-6).map(x=>x.v);
+  const r=(v[3]+v[4]+v[5])/3, o=(v[0]+v[1]+v[2])/3;
+  const ratio = r/(o||1);
+  if (ratio>1.35) return {l:"🔥 Yüksek",mult:ratio};
+  if (ratio<0.7) return {l:"❄️ Düşük",mult:ratio};
+  return {l:"➡️ Normal",mult:ratio};
+}
+
+// ── SCORING SYSTEM ─────────────────────────────────────────
+// 0-100 arası skor: 50 nötr, üstü LONG, altı SHORT
+// Formasyon, trend, RSI ve hacim birleşik
+function calculateScore(t, r, p, v) {
+  let score = 50; // nötr başlangıç
+
+  // 1) Trend ağırlığı (en önemli, ±25 puan)
+  if (t.d === "bull") score += 12 + (t.strength * 7);   // hafif: +19, güçlü: +26
+  else if (t.d === "bear") score -= 12 + (t.strength * 7);
+
+  // 2) Formasyon ağırlığı (±20 puan)
+  const patternWeights = {
+    "Güçlü Yeşil": 18, "Bull Engulfing": 20, "Çekiç": 16,
+    "Güçlü Kırmızı": -18, "Bear Engulfing": -20, "Kayan Yıldız": -16,
+    "Yükseliş": 8, "Düşüş": -8,
+    "Doji": 0, "Spinning Top": 0
+  };
+  score += (patternWeights[p.l] || 0);
+
+  // 3) RSI değerlendirmesi (±15 puan)
+  if (r !== null) {
+    if (r > 80) score -= 12;      // aşırı alım → düşüş riski
+    else if (r > 70) score -= 6;
+    else if (r > 55) score += 5;
+    else if (r >= 45) score += 0;
+    else if (r >= 30) score -= 5;
+    else if (r >= 20) score += 6;  // aşırı satım → dönüş şansı
+    else score += 12;
+  }
+
+  // 4) Hacim çarpanı (sinyali güçlendirir/zayıflatır, ±5 puan)
+  if (v.mult > 1.5 && score !== 50) {
+    const dir = score > 50 ? 1 : -1;
+    score += dir * 5;
+  } else if (v.mult < 0.6 && score !== 50) {
+    // düşük hacim sinyali zayıflatır → nötre yaklaştır
+    score = 50 + (score - 50) * 0.7;
+  }
+
+  return Math.round(Math.max(0, Math.min(100, score)));
+}
+
+function scoreToSignal(score) {
+  if (score >= 75) return { l: "GÜÇLÜ LONG", c: "LONG", color: "var(--bull)" };
+  if (score >= 60) return { l: "LONG", c: "LONG", color: "var(--bull)" };
+  if (score >= 45) return { l: "NÖTR/HAFİF AL", c: "NÖTR", color: "var(--neut)" };
+  if (score >= 30) return { l: "NÖTR/HAFİF SAT", c: "NÖTR", color: "var(--neut)" };
+  if (score >= 15) return { l: "SHORT", c: "SHORT", color: "var(--bear)" };
+  return { l: "GÜÇLÜ SHORT", c: "SHORT", color: "var(--bear)" };
+}
+
+// ── Yorum üretici ─────────────────────────────────────────
+// Trend + formasyon + RSI + hacim'i okuyup Türkçe kısa yorum üretir
+function generateComment(t, r, p, v, score, sig, interval) {
+  const parts = [];
+  const tfLabel = LABELS[interval];
+
+  // 1. Skor bazlı genel başlık
+  if (score >= 75) {
+    parts.push(`Çok güçlü alım sinyali.`);
+  } else if (score >= 60) {
+    parts.push(`Pozitif görünüm, LONG tarafında.`);
+  } else if (score >= 45) {
+    parts.push(`Hafif pozitif ama net sinyal yok.`);
+  } else if (score >= 30) {
+    parts.push(`Hafif zayıflık, dikkatli ol.`);
+  } else if (score >= 15) {
+    parts.push(`Satıcılar baskın, SHORT tarafında.`);
+  } else {
+    parts.push(`Çok güçlü satış baskısı.`);
+  }
+
+  // 2. Trend yorumu
+  if (t.d === "bull" && t.strength === 2) {
+    parts.push(`EMA dizilimi güçlü yukarı.`);
+  } else if (t.d === "bear" && t.strength === 2) {
+    parts.push(`EMA dizilimi güçlü aşağı.`);
+  } else if (t.d === "neutral") {
+    parts.push(`Fiyat yatay sıkışmış, kırılım bekleniyor.`);
+  }
+
+  // 3. RSI yorumu (en kritik uyarılar)
+  if (r !== null) {
+    if (r > 80) {
+      parts.push(`RSI ${r} — aşırı alım, tepe alım riski yüksek, geri çekilme beklenir.`);
+    } else if (r > 70) {
+      parts.push(`RSI ${r} — alım bölgesinde, sıkı stop koy.`);
+    } else if (r < 20) {
+      parts.push(`RSI ${r} — aşırı satım, tepki alımı gelebilir.`);
+    } else if (r < 30) {
+      parts.push(`RSI ${r} — satım bölgesinde, dönüş arayanlar bakabilir.`);
+    }
+  }
+
+  // 4. Formasyon yorumu (önemli olanları söyle)
+  const patternComments = {
+    "Bull Engulfing": "Yutucu yeşil mum — agresif alıcı girişi.",
+    "Bear Engulfing": "Yutucu kırmızı mum — sert satıcı girişi.",
+    "Çekiç": "Çekiç — düşüşten dönüş sinyali olabilir.",
+    "Kayan Yıldız": "Kayan yıldız — tepe dönüş sinyali, dikkat.",
+    "Güçlü Yeşil": "Güçlü yeşil mum, momentum yukarı.",
+    "Güçlü Kırmızı": "Güçlü kırmızı mum, momentum aşağı.",
+    "Doji": "Doji — kararsızlık, yön belli değil.",
+    "Spinning Top": "Topaç — alıcı/satıcı dengesi, beklemede.",
+  };
+  if (patternComments[p.l]) parts.push(patternComments[p.l]);
+
+  // 5. Hacim teyit/uyarı
+  if (v.mult > 1.5) {
+    if (score > 55) parts.push(`Hacim yüksek, hareket teyitli.`);
+    else if (score < 45) parts.push(`Yüksek hacimle satış — dikkat.`);
+    else parts.push(`Hacim arttı, yön netleşecek.`);
+  } else if (v.mult < 0.6) {
+    parts.push(`Hacim düşük, sinyal zayıf.`);
+  }
+
+  // 6. Pratik öneri
+  if (interval === "1d") {
+    if (score >= 60) parts.push(`Pozisyon: 1D trend yukarı, kısa TF'de dip aramak mantıklı.`);
+    else if (score <= 30) parts.push(`Pozisyon: 1D trend aşağı, LONG kovalama riskli.`);
+  } else if (interval === "1m" || interval === "3m") {
+    if (r > 75) parts.push(`Scalp: girişe geç kaldın, geri çekilmeyi bekle.`);
+    else if (r < 25) parts.push(`Scalp: tepki alımı için uygun bölge.`);
+  }
+
+  return parts.join(" ");
+}
+
+// ── PROXY CONFIG ──────────────────────────────────────────
+// Varsayılan: codetabs public proxy (rate-limited)
+// Kendi Cloudflare Worker'ın varsa onu kullan — rate limit yok!
+const DEFAULT_PROXY = 'codetabs';
+let PROXY_MODE = localStorage.getItem('proxyMode') || DEFAULT_PROXY; // 'codetabs' veya 'custom'
+let CUSTOM_PROXY_URL = localStorage.getItem('customProxyUrl') || '';
+
+function buildBinanceFuturesUrl(symbol, interval, limit = 60) {
+  const params = `symbol=${symbol}&interval=${interval}&limit=${limit}`;
+  if (PROXY_MODE === 'custom' && CUSTOM_PROXY_URL) {
+    // Custom worker: https://YOUR.workers.dev/fapi/v1/klines?...
+    return CUSTOM_PROXY_URL.replace(/\/$/, '') + `/fapi/v1/klines?${params}`;
+  }
+  // Codetabs: & işaretlerini encode et
+  const inner = `https://fapi.binance.com/fapi/v1/klines?symbol=${symbol}%26interval=${interval}%26limit=${limit}`;
+  return `https://api.codetabs.com/v1/proxy/?quest=${inner}`;
+}
+
+function buildBinanceFuturesTickerUrl(symbol) {
+  if (PROXY_MODE === 'custom' && CUSTOM_PROXY_URL) {
+    const path = symbol ? `/fapi/v1/ticker/24hr?symbol=${symbol}` : `/fapi/v1/ticker/24hr`;
+    return CUSTOM_PROXY_URL.replace(/\/$/, '') + path;
+  }
+  const innerPath = symbol ? `https://fapi.binance.com/fapi/v1/ticker/24hr?symbol=${symbol}` : `https://fapi.binance.com/fapi/v1/ticker/24hr`;
+  return `https://api.codetabs.com/v1/proxy/?quest=${innerPath}`;
+}
+
+// ── RATE LIMITER ──────────────────────────────────────────
+// Codetabs proxy'sini Binance rate-limit'ine takılmamak için:
+// 1) Global queue — istekler sırayla geçer
+// 2) Her istekten sonra minimum delay
+// 3) Rate limit yenirse otomatik backoff + uzun bekleme
+
+const RATE_LIMIT = {
+  minDelayMs: 250,        // İki istek arası min süre (codetabs için güvenli)
+  maxConcurrent: 2,       // Aynı anda max 2 paralel istek
+  backoffOnLimitMs: 5000, // Rate limit yenince 5 saniye bekle
+  lastBackoffUntil: 0,    // Backoff'un bittiği zaman
+  activeRequests: 0,
+  lastRequestTime: 0,
+  queue: [],
+};
+
+function _processQueue() {
+  while (RATE_LIMIT.queue.length > 0 && RATE_LIMIT.activeRequests < RATE_LIMIT.maxConcurrent) {
+    const now = Date.now();
+    // Backoff sürüyor mu?
+    if (now < RATE_LIMIT.lastBackoffUntil) {
+      const wait = RATE_LIMIT.lastBackoffUntil - now;
+      setTimeout(_processQueue, wait + 50);
+      return;
+    }
+    // Min delay kontrolü
+    const sinceLast = now - RATE_LIMIT.lastRequestTime;
+    if (sinceLast < RATE_LIMIT.minDelayMs) {
+      setTimeout(_processQueue, RATE_LIMIT.minDelayMs - sinceLast);
+      return;
+    }
+
+    const task = RATE_LIMIT.queue.shift();
+    RATE_LIMIT.activeRequests++;
+    RATE_LIMIT.lastRequestTime = Date.now();
+    task();
+  }
+}
+
+function rateLimitedFetch(url, opts) {
+  return new Promise((resolve, reject) => {
+    RATE_LIMIT.queue.push(async () => {
+      try {
+        const result = await fetch(url, opts);
+        resolve(result);
+      } catch(e) {
+        reject(e);
+      } finally {
+        RATE_LIMIT.activeRequests--;
+        _processQueue();
+      }
+    });
+    _processQueue();
+  });
+}
+
+function triggerBackoff(ms = RATE_LIMIT.backoffOnLimitMs) {
+  RATE_LIMIT.lastBackoffUntil = Date.now() + ms;
+  console.warn(`Rate limit backoff: ${ms}ms`);
+  // UI'da göster
+  const note = document.getElementById('rateLimitNote');
+  if (note) {
+    note.style.display = 'block';
+    note.textContent = `⏸️ Rate limit — ${Math.ceil(ms/1000)}s bekleniyor…`;
+    setTimeout(() => { if (note) note.style.display = 'none'; }, ms);
+  }
+}
+
+async function _fetchWithRetry(url, opts = {}, retries = 3, delayMs = 1000) {
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const r = await rateLimitedFetch(url, opts);
+      if (!r.ok) {
+        if (r.status === 429 || r.status === 503) {
+          triggerBackoff(RATE_LIMIT.backoffOnLimitMs * (attempt+1));
+          if (attempt < retries) { await new Promise(rs => setTimeout(rs, delayMs * (attempt+1))); continue; }
+        }
+        throw new Error(`HTTP ${r.status}`);
+      }
+      const text = await r.text();
+      // Binance hata objesi tespiti
+      if (text.includes('"code":-1003')) {
+        triggerBackoff(RATE_LIMIT.backoffOnLimitMs * (attempt+1));
+        if (attempt < retries) { await new Promise(rs => setTimeout(rs, delayMs * (attempt+1))); continue; }
+        throw new Error('rate-limit (-1003)');
+      }
+      if (text.includes('"code":-1121')) throw new Error('invalid symbol');
+      let d;
+      try { d = JSON.parse(text); } catch(e) { throw new Error('bad JSON'); }
+      if (!Array.isArray(d)) {
+        if (d.code) throw new Error(`API ${d.code}: ${d.msg||'?'}`);
+        throw new Error('not array');
+      }
+      if (d.length === 0) throw new Error('empty array');
+      return d;
+    } catch(e) {
+      if (attempt === retries) throw e;
+      await new Promise(rs => setTimeout(rs, delayMs * (attempt+1)));
+    }
+  }
+}
+
+// ── Sources (Binance F + Spot) ────────────────────────────
+async function fetchBinanceFutures(symbol, interval) {
+  const url = buildBinanceFuturesUrl(symbol, interval, 60);
+  // Custom proxy ise rate limiter'a gerek yok — direkt fetch
+  if (PROXY_MODE === 'custom' && CUSTOM_PROXY_URL) {
+    const r = await fetch(url);
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const d = await r.json();
+    if (!Array.isArray(d) || d.length === 0) throw new Error('empty');
+    return d.map(x => ({ o:+x[1], h:+x[2], l:+x[3], c:+x[4], v:+x[5] }));
+  }
+  // Codetabs için rate limiter
+  const d = await _fetchWithRetry(url, { method: 'GET', mode: 'cors' }, 3);
+  return d.map(x => ({ o:+x[1], h:+x[2], l:+x[3], c:+x[4], v:+x[5] }));
+}
+
+async function fetchBinanceSpot(symbol, interval) {
+  const url = `https://data-api.binance.vision/api/v3/klines?symbol=${symbol}&interval=${interval}&limit=60`;
+  // Binance Spot Vision rate limit'i daha gevşek, doğrudan fetch
+  const r = await fetch(url);
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  const d = await r.json();
+  if (!Array.isArray(d) || d.length === 0) throw new Error('empty');
+  return d.map(x => ({ o:+x[1], h:+x[2], l:+x[3], c:+x[4], v:+x[5] }));
+}
+
+async function fetchKlines(symbol, interval) {
+  try { return { data: await fetchBinanceFutures(symbol, interval), src: "BIN-F" }; }
+  catch(e1) {
+    try { return { data: await fetchBinanceSpot(symbol, interval), src: "BIN-S" }; }
+    catch(e2) { throw new Error(`Futures: ${e1.message} · Spot: ${e2.message}`); }
+  }
+}
+
+// Top 10 24h gainers from Binance Futures
+async function fetchTopMovers() {
+  try {
+    const url = buildBinanceFuturesTickerUrl(null);
+    const r = await fetch(url, { method: 'GET', mode: 'cors' });
+    if (!r.ok) throw new Error('ticker '+r.status);
+    const data = await r.json();
+    if (!Array.isArray(data)) throw new Error('ticker invalid');
+    const filtered = data
+      .filter(t => t.symbol.endsWith('USDT') && +t.quoteVolume > 1_000_000)
+      .map(t => ({ symbol: t.symbol, chg: +t.priceChangePercent }))
+      .sort((a,b) => b.chg - a.chg)
+      .slice(0, TOP_N);
+    TOP_MOVERS_DATA = filtered;
+    return filtered.map(x => x.symbol);
+  } catch(e) {
+    console.warn('Top movers failed:', e);
+    TOP_MOVERS_DATA = [];
+    return [];
+  }
+}
+
+// ── Main load ──────────────────────────────────────────────
+async function loadAll() {
+  document.getElementById('progressBar').style.display = 'block';
+  document.getElementById('progressFill').style.width = '5%';
+
+  // Step 1: Top movers
+  if (Object.keys(DATA).length === 0) {
+    document.getElementById('grid').innerHTML = '<div class="loading">Binance Futures top 10 alınıyor…</div>';
+  }
+  TOP_MOVERS = await fetchTopMovers();
+  rebuildSymbols();
+  renderChips();
+
+  if (SYMBOLS.length === 0) {
+    document.getElementById('grid').innerHTML = '<div class="empty">Coin yok. Yenile bas veya manuel ekle.</div>';
+    document.getElementById('summary').textContent = 'Coin yok';
+    document.getElementById('progressBar').style.display = 'none';
+    return;
+  }
+
+  // Step 2: Per-symbol klines
+  document.getElementById('grid').innerHTML = '<div class="loading">Mum verisi çekiliyor…</div>';
+  const total = SYMBOLS.length * INTERVALS.length;
+  let done = 0;
+  const newData = {};
+  for (const sym of SYMBOLS) {
+    newData[sym] = {};
+    await Promise.all(INTERVALS.map(async iv => {
+      try {
+        const { data: k, src } = await fetchKlines(sym, iv);
+        const closes = k.map(c=>c.c);
+        const t = trend(k);
+        const r = rsi(closes);
+        const p = pattern(k);
+        const v = volTrend(k);
+        const score = calculateScore(t, r, p, v);
+        const sig = scoreToSignal(score);
+        const comment = generateComment(t, r, p, v, score, sig, iv);
+        const last = closes.at(-1);
+        const prev = closes.at(-2);
+        const chg = ((last-prev)/prev*100);
+        newData[sym][iv] = { t,r,p,v,score,sig,comment,last,chg,src };
+      } catch(e) {
+        newData[sym][iv] = { error: e.message };
+      }
+      done++;
+      document.getElementById('progressFill').style.width = (done/total*100)+'%';
+    }));
+  }
+  DATA = newData;
+  document.getElementById('progressBar').style.display = 'none';
+  document.getElementById('updated').textContent = 'Güncellendi: ' + new Date().toLocaleTimeString('tr-TR');
+  render();
+  renderChips();
+}
+
+// ── Chip / coin management ────────────────────────────────
+function renderChips() {
+  document.getElementById('coinCount').textContent = `(${SYMBOLS.length})`;
+
+  const topEl = document.getElementById('chipsTop');
+  if (TOP_MOVERS_DATA.length === 0) {
+    topEl.innerHTML = '<span style="color:var(--muted);font-size:12px">Yenile bas…</span>';
+  } else {
+    topEl.innerHTML = TOP_MOVERS_DATA
+      .filter(t => TOP_MOVERS.includes(t.symbol))
+      .map(t => `
+        <span class="chip top">
+          ${t.symbol}
+          <span style="color:var(--bull);font-size:11px;font-weight:700">+${t.chg.toFixed(2)}%</span>
+          <button class="x" onclick="hideTopCoin('${t.symbol}')" title="Bu oturumda gizle">×</button>
+        </span>
+      `).join('');
+  }
+
+  const userEl = document.getElementById('chipsUser');
+  if (USER_ADDED.length === 0) {
+    userEl.innerHTML = '<span style="color:var(--muted);font-size:12px">Henüz eklenmedi.</span>';
+  } else {
+    userEl.innerHTML = USER_ADDED.map(s => `
+      <span class="chip user">${s}<button class="x" onclick="removeUserCoin('${s}')" title="Listeden çıkar">×</button></span>
+    `).join('');
+  }
+}
+
+function addCoin() {
+  const input = document.getElementById('newCoin');
+  let val = (input.value || '').trim().toUpperCase().replace(/[^A-Z0-9]/g,'');
+  if (!val) return;
+  if (!val.endsWith('USDT')) val = val + 'USDT';
+  if (USER_ADDED.includes(val)) { input.value=''; return; }
+  USER_ADDED.push(val);
+  saveUserAdded();
+  rebuildSymbols();
+  input.value = '';
+  renderChips();
+  loadAll();
+}
+
+function removeUserCoin(sym) {
+  USER_ADDED = USER_ADDED.filter(s => s !== sym);
+  saveUserAdded();
+  rebuildSymbols();
+  delete DATA[sym];
+  renderChips();
+  render();
+}
+
+function hideTopCoin(sym) {
+  // Sadece bu oturumda kaldır; bir sonraki refresh'te tekrar gelebilir
+  TOP_MOVERS = TOP_MOVERS.filter(s => s !== sym);
+  rebuildSymbols();
+  delete DATA[sym];
+  renderChips();
+  render();
+}
+
+function toggleManager() { document.getElementById('manager').classList.toggle('open'); }
+
+document.getElementById('newCoin').addEventListener('keydown', e => { if (e.key === 'Enter') addCoin(); });
+
+// ── Render cards ──────────────────────────────────────────
+function render() {
+  const tabsEl = document.getElementById('tabs');
+  tabsEl.innerHTML = INTERVALS.map(iv =>
+    `<button class="tab ${iv===activeInt?'active':''}" data-iv="${iv}">${LABELS[iv]}</button>`
+  ).join('') + `
+    <button class="tab" style="margin-left:auto" id="sortBtn">
+      ${sortMode === "default" ? "📊 Sıralama: 24s ↓" : "🎯 Sıralama: Skor ↓"}
+    </button>
+  `;
+  tabsEl.querySelectorAll('.tab[data-iv]').forEach(b => {
+    b.onclick = () => { activeInt = b.dataset.iv; render(); };
+  });
+  document.getElementById('sortBtn').onclick = () => {
+    sortMode = (sortMode === "default") ? "score" : "default";
+    render();
+  };
+
+  let longs=0, shorts=0, neutral=0, errors=0, avgScore=0, scored=0;
+  SYMBOLS.forEach(s => {
+    const d = DATA[s]?.[activeInt];
+    if (!d) return;
+    if (d.error) { errors++; return; }
+    if (d.sig.c==='LONG') longs++;
+    else if (d.sig.c==='SHORT') shorts++;
+    else neutral++;
+    avgScore += d.score; scored++;
+  });
+  const avg = scored ? Math.round(avgScore/scored) : 50;
+  document.getElementById('summary').innerHTML =
+    `<strong>${LABELS[activeInt]}</strong> · ` +
+    `<span style="color:var(--bull)">LONG: ${longs}</span> · ` +
+    `<span style="color:var(--bear)">SHORT: ${shorts}</span> · ` +
+    `<span style="color:var(--neut)">Nötr: ${neutral}</span>` +
+    ` · Ort. skor: <strong>${avg}</strong>/100` +
+    (errors>0 ? ` · <span style="color:var(--bear)">Hata: ${errors}</span>` : '');
+
+  const grid = document.getElementById('grid');
+  if (SYMBOLS.length === 0) { grid.innerHTML = '<div class="empty">Coin yok.</div>'; return; }
+
+  let sorted;
+  if (sortMode === "score") {
+    // Skora göre: yüksek skor üstte
+    sorted = [...SYMBOLS].sort((a,b) => {
+      const sa = DATA[a]?.[activeInt]?.score ?? -1;
+      const sb = DATA[b]?.[activeInt]?.score ?? -1;
+      return sb - sa;
+    });
+  } else {
+    // Varsayılan: SYMBOLS sırası (top movers 24s sırasına göre + user-added altta)
+    sorted = [...SYMBOLS];
+  }
+
+  grid.innerHTML = sorted.map(sym => {
+    const d = DATA[sym]?.[activeInt];
+    if (!d) return `<div class="card"><div class="sym">${sym}</div><div class="err">Yükleniyor…</div></div>`;
+    if (d.error) return `<div class="card"><div class="sym">${sym}</div><div class="err">⚠ ${d.error}</div></div>`;
+
+    const sideColor = d.sig.color;
+    const chgCls = d.chg>=0?'chg-bull':'chg-bear';
+    const chgStr = (d.chg>=0?'+':'') + d.chg.toFixed(2) + '%';
+    const trendColor = d.t.d==='bull'?'var(--bull)':d.t.d==='bear'?'var(--bear)':'var(--neut)';
+    const patColor = d.p.s==='bull'?'var(--bull)':d.p.s==='bear'?'var(--bear)':'var(--neut)';
+    const rsiColor = d.r>70?'var(--warn)':d.r<30?'var(--info)':'var(--text)';
+    const isTop = TOP_MOVERS.includes(sym);
+    const topData = TOP_MOVERS_DATA.find(t => t.symbol === sym);
+    const top24Tag = topData ? `<span class="src-badge" style="border-color:rgba(16,185,129,.3);color:var(--bull)">24s +${topData.chg.toFixed(1)}%</span>` : '';
+
+    return `
+      <div class="card" style="--side:${sideColor}">
+        <div class="row1">
+          <div class="sym-wrap">
+            <div class="sym">${sym}</div>
+            ${isTop ? '<span class="src-badge" style="border-color:rgba(251,191,36,.3);color:var(--accent)">TOP</span>' : ''}
+            ${top24Tag}
+            <span class="src-badge">${d.src}</span>
+          </div>
+          <div class="price">${d.last}<div class="price-sub ${chgCls}">${chgStr}</div></div>
+        </div>
+
+        <div class="score-block">
+          <div class="score-num" style="color:${sideColor}">${d.score}</div>
+          <div class="score-bar-wrap">
+            <div class="score-label">
+              <span>Skor / 100</span>
+              <span class="sig-tag" style="background:${sideColor}22;color:${sideColor}">${d.sig.l}</span>
+            </div>
+            <div class="score-bar"><div class="score-fill" style="width:${d.score}%;background:${sideColor}"></div></div>
+          </div>
+        </div>
+
+        <div class="comment">
+          <span class="comment-lbl">📝 Yorum</span>
+          ${d.comment}
+        </div>
+
+        <div class="metrics">
+          <div class="m"><div class="lbl">Trend</div><div class="val" style="color:${trendColor}">${d.t.l}</div></div>
+          <div class="m"><div class="lbl">RSI 14</div><div class="val" style="color:${rsiColor}">${d.r ?? '—'}</div><div class="sub-val">${d.r>70?'aşırı alım':d.r<30?'aşırı satım':'nötr'}</div></div>
+          <div class="m"><div class="lbl">Formasyon</div><div class="val" style="color:${patColor}">${d.p.l}</div></div>
+          <div class="m"><div class="lbl">Hacim</div><div class="val">${d.v.l}</div></div>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+renderChips();
+
+// ── ARŞIV (localStorage) ──────────────────────────────────
+const ARCHIVE_KEY = 'analysisArchive';
+const ARCHIVE_LIMIT = 100; // En fazla 100 kayıt (manuel + tarama birlikte)
+
+function loadArchive() {
+  try {
+    const raw = localStorage.getItem(ARCHIVE_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch(e) { return []; }
+}
+function saveToArchive(entry) {
+  let archive = loadArchive();
+  // Manuel için: aynı sembol son 5dk içinde aynı tipte kaydedildiyse üzerine yaz
+  if (entry.type === 'manual') {
+    const recent = archive.findIndex(a =>
+      a.type === 'manual' && a.symbol === entry.symbol && (Date.now() - a.timestamp) < 5 * 60 * 1000
+    );
+    if (recent !== -1) { archive[recent] = entry; }
+    else { archive.unshift(entry); }
+  } else {
+    archive.unshift(entry);
+  }
+  if (archive.length > ARCHIVE_LIMIT) archive = archive.slice(0, ARCHIVE_LIMIT);
+  try { localStorage.setItem(ARCHIVE_KEY, JSON.stringify(archive)); } catch(e) {}
+  renderArchive();
+}
+function saveScanResultsToArchive(opportunities, stats) {
+  if (opportunities.length === 0) return;
+  const scanEntry = {
+    type: 'scan',
+    isShort: stats.isShort || false,
+    timestamp: Date.now(),
+    scanned: stats.scanned,
+    found: stats.found,
+    opportunities: opportunities,
+    topSymbol: opportunities[0]?.symbol,
+    topScore: opportunities[0]?.combinedScore,
+  };
+  let archive = loadArchive();
+  archive.unshift(scanEntry);
+  if (archive.length > ARCHIVE_LIMIT) archive = archive.slice(0, ARCHIVE_LIMIT);
+  try { localStorage.setItem(ARCHIVE_KEY, JSON.stringify(archive)); } catch(e) {}
+  renderArchive();
+}
+function deleteArchiveItem(idx, ev) {
+  if (ev) ev.stopPropagation();
+  let archive = loadArchive();
+  archive.splice(idx, 1);
+  try { localStorage.setItem(ARCHIVE_KEY, JSON.stringify(archive)); } catch(e) {}
+  renderArchive();
+}
+function clearArchive(ev) {
+  if (ev) ev.stopPropagation();
+  if (!confirm('Tüm arşivi silmek istediğinden emin misin?')) return;
+  try { localStorage.removeItem(ARCHIVE_KEY); } catch(e) {}
+  renderArchive();
+}
+function toggleArchiveSection(id) {
+  document.getElementById(id).classList.toggle('open');
+}
+function toggleArchive() {
+  // legacy - both
+  document.getElementById('archiveSectionManual')?.classList.toggle('open');
+}
+
+let archiveFilter = 'all'; // 'all' | 'manual' | 'scan'
+function setArchiveFilter(filter, ev) {
+  if (ev) ev.stopPropagation();
+  archiveFilter = filter;
+  renderArchive();
+}
+
+function formatRelativeTime(ts) {
+  const diff = Date.now() - ts;
+  const m = Math.floor(diff / 60000);
+  if (m < 1) return 'şimdi';
+  if (m < 60) return `${m} dk önce`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h} sa önce`;
+  const d = Math.floor(h / 24);
+  return `${d} gün önce`;
+}
+
+function buildArchiveHTML() {
+  const archive = loadArchive();
+  const manualCount = archive.filter(a => a.type === 'manual').length;
+  const scanCount = archive.filter(a => a.type === 'scan').length;
+
+  const filtered = archive.filter(a => archiveFilter === 'all' || a.type === archiveFilter);
+
+  const filterBar = `
+    <div class="archive-filters">
+      <button class="filter-btn ${archiveFilter==='all'?'active':''}" onclick="setArchiveFilter('all', event)">Tümü (${archive.length})</button>
+      <button class="filter-btn ${archiveFilter==='manual'?'active':''}" onclick="setArchiveFilter('manual', event)">🔍 Manuel (${manualCount})</button>
+      <button class="filter-btn ${archiveFilter==='scan'?'active':''}" onclick="setArchiveFilter('scan', event)">🎯 Tarama (${scanCount})</button>
+    </div>
+  `;
+
+  if (filtered.length === 0) {
+    return { count: archive.length, html: filterBar + '<div style="color:var(--muted);font-size:12px;text-align:center;padding:20px">Bu filtrede kayıt yok.</div>' };
+  }
+
+  const items = filtered.map(a => {
+    const realIdx = archive.indexOf(a);
+
+    if (a.type === 'manual') {
+      const passBadge = a.passes
+        ? '<span class="pass-tag" style="background:rgba(16,185,129,.15);color:var(--bull)">✓ Tümü</span>'
+        : a.combinedScore >= 50
+          ? `<span class="pass-tag" style="background:rgba(245,158,11,.15);color:var(--warn)">${a.passedCount}/${a.totalChecks}</span>`
+          : `<span class="pass-tag" style="background:rgba(239,68,68,.15);color:var(--bear)">${a.passedCount}/${a.totalChecks}</span>`;
+      const scoreColor = a.combinedScore >= 65 ? 'var(--bull)' : a.combinedScore >= 50 ? 'var(--warn)' : 'var(--bear)';
+      return `
+        <div class="archive-item manual" onclick="loadArchivedItem(${realIdx})">
+          <div class="left">
+            <div class="row-top">
+              <span class="type-badge manual-badge">🔍 Manuel</span>
+              <span class="sym">${a.symbol}</span>
+            </div>
+            <span class="time">${new Date(a.timestamp).toLocaleString('tr-TR')} · ${formatRelativeTime(a.timestamp)}</span>
+          </div>
+          <div class="right">
+            ${passBadge}
+            <span class="score" style="color:${scoreColor}">${Math.round(a.combinedScore)}</span>
+            <button class="del-btn" onclick="deleteArchiveItem(${realIdx}, event)" title="Sil">×</button>
+          </div>
+        </div>
+      `;
+    } else {
+      const isShortScan = a.isShort;
+      const typeLabel = isShortScan ? '🩸 SHORT Tarama' : '🎯 LONG Tarama';
+      const badgeColor = isShortScan ? 'rgba(239,68,68,.15)' : 'rgba(34,211,238,.15)';
+      const badgeText = isShortScan ? 'var(--bear)' : 'var(--info)';
+      return `
+        <div class="archive-item scan" style="${isShortScan ? 'border-left-color:var(--bear)' : ''}" onclick="loadArchivedItem(${realIdx})">
+          <div class="left">
+            <div class="row-top">
+              <span class="type-badge scan-badge" style="${isShortScan ? 'background:rgba(239,68,68,.15);color:var(--bear)' : ''}">${typeLabel}</span>
+              <span class="sym">${a.found} fırsat bulundu</span>
+            </div>
+            <span class="time">${new Date(a.timestamp).toLocaleString('tr-TR')} · ${formatRelativeTime(a.timestamp)} · ${a.scanned} coin tarandı</span>
+            ${a.topSymbol ? `<span class="time" style="color:var(--accent);margin-top:2px">🏆 En iyi: ${a.topSymbol} (skor ${Math.round(a.topScore)})</span>` : ''}
+          </div>
+          <div class="right">
+            <span class="pass-tag" style="background:${badgeColor};color:${badgeText}">${a.found} fırsat</span>
+            <button class="del-btn" onclick="deleteArchiveItem(${realIdx}, event)" title="Sil">×</button>
+          </div>
+        </div>
+      `;
+    }
+  }).join('');
+
+  return { count: archive.length, html: filterBar + items };
+}
+
+function renderArchive() {
+  const { count, html } = buildArchiveHTML();
+  ['archiveBodyManual','archiveBodyScanner','archiveBodyShortScanner'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.innerHTML = html;
+  });
+  ['archiveCountManual','archiveCountScanner','archiveCountShortScanner'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = `(${count})`;
+  });
+}
+
+function loadArchivedItem(idx) {
+  const archive = loadArchive();
+  const a = archive[idx];
+  if (!a) return;
+  if (a.type === 'manual') {
+    document.getElementById('manualCoin').value = a.symbol.replace('USDT','');
+    renderManualResult(a);
+    document.getElementById('manualResult').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  } else {
+    // Scan kaydını yükle: scanner sayfasına geç ve sonuçları göster
+    showArchivedScan(a);
+  }
+}
+
+function showArchivedScan(scanEntry) {
+  const isShort = scanEntry.isShort;
+  const targetPage = isShort ? 'shortScanner' : 'scanner';
+  document.querySelectorAll('.page-tab').forEach(b => b.classList.toggle('active', b.dataset.page === targetPage));
+  document.querySelectorAll('.page').forEach(p => p.classList.toggle('active', p.id === 'page-'+targetPage));
+  currentPage = targetPage;
+
+  const statsEl = document.getElementById(isShort ? 'shortScannerStats' : 'scannerStats');
+  const oppEl = document.getElementById(isShort ? 'shortOpportunities' : 'opportunities');
+  const progressEl = document.getElementById(isShort ? 'shortScannerProgress' : 'scannerProgress');
+  if (progressEl) progressEl.style.display = 'none';
+
+  statsEl.innerHTML = `
+    <div class="scanner-stats" style="border-color:var(--info)">
+      <div class="stat-row"><span class="label" style="color:var(--info)">📚 Arşivden yükleniyor (${isShort ? 'SHORT' : 'LONG'})</span><span class="value">${new Date(scanEntry.timestamp).toLocaleString('tr-TR')}</span></div>
+      <div class="stat-row"><span class="label">Taranan</span><span class="value">${scanEntry.scanned}</span></div>
+      <div class="stat-row"><span class="label">Fırsat sayısı</span><span class="value" style="color:${isShort?'var(--bear)':'var(--bull)'}">${scanEntry.found}</span></div>
+      <div style="margin-top:8px;font-size:11px;color:var(--muted)">⚠️ Bu eski tarama verisi. Güncel için ↻ Yenile bas.</div>
+    </div>
+  `;
+
+  const builder = isShort ? buildShortOpportunityCard : buildOpportunityCard;
+  oppEl.innerHTML = scanEntry.opportunities.map((opp, idx) => builder(opp, idx)).join('');
+  document.getElementById('updated').textContent = 'Arşivden: ' + new Date(scanEntry.timestamp).toLocaleTimeString('tr-TR');
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+// Kriter detayları — her kriter için ne bekleniyordu / ne çıktı
+function evaluateCriteria(sym, chg24h, vol, t1d, r1d, t5m, r5m, p5m, v5m, s1d, s5m, t1m, s1m) {
+  const bullPatterns = ['Bull Engulfing','Çekiç','Güçlü Yeşil','Yükseliş'];
+  const trendShortBull = t5m.d === 'bull' && (t1m ? t1m.d === 'bull' : false);
+  const tfStateText = `5m: ${t5m.l} · 1m: ${t1m ? t1m.l : '—'}`;
+  const patternPass = bullPatterns.includes(p5m.l) || p5m.s === 'bull';
+  const crits = [
+    {
+      name: '5m + 1m trend yukarı 🔒',
+      expected: 'Her iki kısa zaman dilimi de bull',
+      actual: tfStateText,
+      pass: trendShortBull,
+      why: !trendShortBull ? '5m veya 1m yukarı değil — kısa vade momentum sağlam değil' : null
+    },
+    {
+      name: '5m RSI < 65',
+      expected: '< 65 (aşırı alımda değil)',
+      actual: r5m !== null ? `${r5m}` : '—',
+      pass: r5m !== null && r5m < 65,
+      why: r5m !== null && r5m >= 65 ? `RSI ${r5m} — kısa vadede aşırı alım, geri çekilme riski` : null
+    },
+    {
+      name: 'Bull formasyon (5m son mum)',
+      expected: 'Engulfing / Çekiç / Çanak / Güçlü Yeşil / Yükseliş',
+      actual: p5m.l,
+      pass: patternPass,
+      why: !patternPass ? `Son mum "${p5m.l}" — net alıcı baskısı yok` : null
+    },
+    {
+      name: 'Hacim normal/yüksek',
+      expected: 'mult ≥ 0.7 (➡️ Normal veya 🔥 Yüksek)',
+      actual: v5m.l,
+      pass: v5m.mult >= 0.7,
+      why: v5m.mult < 0.7 ? 'Hacim düşük — hareket teyitli değil' : null
+    },
+    {
+      name: 'Pump etmemiş',
+      expected: '24s < %10',
+      actual: `%${chg24h.toFixed(2)}`,
+      pass: chg24h < 10,
+      why: chg24h >= 10 ? `Zaten %${chg24h.toFixed(1)} pump'lamış, tepe alım riski yüksek` : null
+    },
+    {
+      name: '1m skor ≥ 65',
+      expected: '≥ 65 (dakikalık momentum)',
+      actual: (s1m !== undefined && s1m !== null) ? `${s1m}` : '—',
+      pass: (s1m !== undefined && s1m !== null) && s1m >= 65,
+      why: (s1m === undefined || s1m === null)
+        ? '1m verisi yok — dakikalık momentum doğrulanamadı'
+        : (s1m < 65 ? `1m skor ${s1m} — dakikalık momentum yeterince güçlü değil` : null)
+    },
+    {
+      name: '5m skor ≥ 65',
+      expected: '≥ 65',
+      actual: `${s5m}`,
+      pass: s5m >= 65,
+      why: s5m < 65 ? `5m skor ${s5m} — kısa vade giriş için yeterince güçlü değil` : null
+    },
+  ];
+  return crits;
+}
+
+function renderManualResult(opp) {
+  const resultEl = document.getElementById('manualResult');
+  const passes = opp.passes;
+  const headerColor = passes ? 'var(--bull)' : (opp.combinedScore >= 50 ? 'var(--warn)' : 'var(--bear)');
+  const headerText = passes
+    ? '✅ Bu coin tüm LONG kriterlerini geçiyor — fırsat'
+    : (opp.combinedScore >= 50
+        ? `⚠️ ${opp.passedCount}/${opp.totalChecks} kriter geçti — riskli ama bakılabilir`
+        : `❌ ${opp.passedCount}/${opp.totalChecks} kriter geçti — LONG önerilmez`);
+
+  const critRows = opp.criteria.map(c => `
+    <div class="crit-row ${c.pass ? 'pass' : 'fail'}">
+      <span class="icon">${c.pass ? '✅' : '❌'}</span>
+      <div>
+        <div class="name">${c.name}</div>
+        ${!c.pass && c.why ? `<div style="font-size:10.5px;color:var(--bear);margin-top:2px">${c.why}</div>` : ''}
+      </div>
+      <span class="value">${c.actual}</span>
+    </div>
+  `).join('');
+
+  // Tek bir TF bloğu — İzleme sayfasındaki kart analiziyle BİREBİR aynı:
+  // renkli skor bloğu (skor + bar + sinyal etiketi) + 📝 Yorum + metrikler
+  const tfBlock = (label, score, sig, comment, trend, rsiVal, patternLbl, patternSig, vol) => {
+    if (score === undefined || score === null) return '';
+    const sideColor = sig ? sig.color : (score >= 60 ? 'var(--bull)' : score <= 40 ? 'var(--bear)' : 'var(--neut)');
+    const rsiColor = rsiVal > 70 ? 'var(--warn)' : rsiVal < 30 ? 'var(--info)' : 'var(--text)';
+    const trendColor = trend.d === 'bull' ? 'var(--bull)' : trend.d === 'bear' ? 'var(--bear)' : 'var(--neut)';
+    const patColor = patternSig === 'bull' ? 'var(--bull)' : patternSig === 'bear' ? 'var(--bear)' : 'var(--neut)';
+    return `
+      <div class="tf-block">
+        <div class="tf-head">
+          <span class="tf-label">${label}</span>
+          ${sig ? `<span class="sig-tag" style="background:${sideColor}22;color:${sideColor};padding:1px 6px;border-radius:3px;font-size:10px;font-weight:700">${sig.l}</span>` : ''}
+        </div>
+
+        <div class="score-block" style="margin-bottom:8px;padding:8px">
+          <div class="score-num" style="color:${sideColor};font-size:22px;min-width:44px">${score}</div>
+          <div class="score-bar-wrap">
+            <div class="score-label">
+              <span>Skor / 100</span>
+            </div>
+            <div class="score-bar"><div class="score-fill" style="width:${score}%;background:${sideColor}"></div></div>
+          </div>
+        </div>
+
+        ${comment ? `
+        <div class="comment" style="margin-bottom:8px">
+          <span class="comment-lbl">📝 Yorum</span>
+          ${comment}
+        </div>` : ''}
+
+        <div class="tf-metrics">
+          <div class="tf-m"><span class="k">Trend</span><span style="color:${trendColor}">${trend.l}</span></div>
+          <div class="tf-m"><span class="k">RSI 14</span><span style="color:${rsiColor}">${rsiVal ?? '—'}</span></div>
+          <div class="tf-m"><span class="k">Formasyon</span><span style="color:${patColor}">${patternLbl || '—'}</span></div>
+          <div class="tf-m"><span class="k">Hacim</span><span>${vol || '—'}</span></div>
+        </div>
+      </div>
+    `;
+  };
+
+  const cardOpp = { ...opp, warningNote: null, btcRisk: null };
+
+  resultEl.innerHTML = `
+    <div style="margin-top:12px;padding:10px;background:rgba(255,255,255,.02);border-radius:8px;border-left:3px solid ${headerColor};font-size:13px;color:${headerColor};font-weight:600">
+      ${headerText}
+    </div>
+
+    <div class="criteria-detail">
+      <div class="criteria-detail-title">📋 Kriter Detayı (${opp.passedCount}/${opp.totalChecks} geçti)</div>
+      ${critRows}
+    </div>
+
+    <div class="overall-comment">
+      <div class="overall-comment-title">📝 Genel Yorum</div>
+      <div class="overall-comment-body">${opp.overallComment || '—'}</div>
+    </div>
+
+    <div class="tf-grid">
+      ${tfBlock('1 Dakika', opp.s1m, opp.sig1m, opp.cmt1m, opp.t1m, opp.r1m, opp.p1m, opp.p1mSig, opp.v1mLabel)}
+      ${tfBlock('3 Dakika', opp.s3m, opp.sig3m, opp.cmt3m, opp.t3m, opp.r3m, opp.p3m, opp.p3mSig, opp.v3mLabel)}
+      ${tfBlock('5 Dakika', opp.s5m, opp.sig5m, opp.cmt5m, opp.t5m, opp.r5m, opp.p5m, opp.p5mSig, opp.v5mLabel)}
+      ${tfBlock('1 Gün', opp.s1d, opp.sig1d, opp.cmt1d, opp.t1d, opp.r1d, opp.p1d, opp.p1dSig, opp.v1dLabel)}
+    </div>
+
+    ${buildOpportunityCard(cardOpp, null)}
+  `;
+}
+
+// Ortak BTC durumu kontrolü
+async function checkBtcContext() {
+  try {
+    const btc5m = await fetchBinanceFutures('BTCUSDT', '5m');
+    const btc1d = await fetchBinanceFutures('BTCUSDT', '1d');
+    const btc5mCloses = btc5m.map(c => c.c);
+    const btcT1d = trend(btc1d);
+    const btcLast = btc5mCloses.at(-1);
+    const btcPrev1h = btc5mCloses.at(-12) || btc5mCloses[0];
+    const btcChg1h = ((btcLast - btcPrev1h) / btcPrev1h) * 100;
+    const bullish = btcT1d.d !== 'bear' && btcChg1h > -0.5;
+    return { t1d: btcT1d, chg1h: btcChg1h, bullish, veto: !bullish };
+  } catch(e) {
+    return { bullish: true, veto: false, error: e.message };
+  }
+}
+
+// ── MANUEL COIN ANALİZİ ───────────────────────────────────
+async function analyzeManualCoin() {
+  const input = document.getElementById('manualCoin');
+  const resultEl = document.getElementById('manualResult');
+  let sym = (input.value || '').trim().toUpperCase().replace(/[^A-Z0-9]/g,'');
+  if (!sym) return;
+  if (!sym.endsWith('USDT')) sym = sym + 'USDT';
+
+  resultEl.innerHTML = `
+    <div class="scan-progress" style="margin-top:10px">
+      <div class="step">⏳ ${sym} analiz ediliyor…</div>
+      <div class="detail">5m + 1m verileri çekiliyor</div>
+    </div>
+  `;
+
+  try {
+    let chg24h = 0, vol = 0;
+    try {
+      const tickerUrl = buildBinanceFuturesTickerUrl(sym);
+      const tr = await fetch(tickerUrl, { method: 'GET', mode: 'cors' });
+      if (tr.ok) {
+        const td = await tr.json();
+        chg24h = +td.priceChangePercent;
+        vol = +td.quoteVolume;
+      }
+    } catch(e) {}
+
+    const [k1d, k5m, k3m, k1m] = await Promise.all([
+      fetchBinanceFutures(sym, '1d'),
+      fetchBinanceFutures(sym, '5m'),
+      fetchBinanceFutures(sym, '3m'),
+      fetchBinanceFutures(sym, '1m')
+    ]);
+
+    if (k1d.length < 21 || k5m.length < 21) {
+      resultEl.innerHTML = `<div class="empty" style="margin-top:10px;color:var(--bear)">⚠ ${sym} için yeterli mum verisi yok</div>`;
+      return;
+    }
+
+    const c1d = k1d.map(x=>x.c);
+    const c5m = k5m.map(x=>x.c);
+    const c3m = k3m && k3m.length >= 21 ? k3m.map(x=>x.c) : null;
+    const c1m = k1m && k1m.length >= 21 ? k1m.map(x=>x.c) : null;
+
+    const t1d = trend(k1d), r1d = rsi(c1d), p1d = pattern(k1d), v1d = volTrend(k1d);
+    const t5m = trend(k5m), r5m = rsi(c5m), p5m = pattern(k5m), v5m = volTrend(k5m);
+    let t3m, r3m, p3m, v3m, s3m;
+    if (c3m) {
+      t3m = trend(k3m); r3m = rsi(c3m); p3m = pattern(k3m); v3m = volTrend(k3m);
+      s3m = calculateScore(t3m, r3m, p3m, v3m);
+    }
+    let t1m, r1m, p1m, v1m, s1m;
+    if (c1m) {
+      t1m = trend(k1m); r1m = rsi(c1m); p1m = pattern(k1m); v1m = volTrend(k1m);
+      s1m = calculateScore(t1m, r1m, p1m, v1m);
+    }
+
+    const s1d = calculateScore(t1d, r1d, p1d, v1d);
+    const s5m = calculateScore(t5m, r5m, p5m, v5m);
+
+    // ── İzleme sayfasıyla aynı: her TF için sinyal + detaylı yorum ──
+    const sig1d = scoreToSignal(s1d);
+    const sig5m = scoreToSignal(s5m);
+    const sig3m = (s3m !== undefined) ? scoreToSignal(s3m) : null;
+    const sig1m = (s1m !== undefined) ? scoreToSignal(s1m) : null;
+    const cmt1d = generateComment(t1d, r1d, p1d, v1d, s1d, sig1d, '1d');
+    const cmt5m = generateComment(t5m, r5m, p5m, v5m, s5m, sig5m, '5m');
+    const cmt3m = (s3m !== undefined) ? generateComment(t3m, r3m, p3m, v3m, s3m, sig3m, '3m') : null;
+    const cmt1m = (s1m !== undefined) ? generateComment(t1m, r1m, p1m, v1m, s1m, sig1m, '1m') : null;
+    // Birleşik skor sadece görünür TF'lerden (1m, 3m, 5m)
+    const visibleScores = [s5m];
+    if (s3m !== undefined) visibleScores.push(s3m);
+    if (s1m !== undefined) visibleScores.push(s1m);
+    const combinedScore = visibleScores.reduce((a,b) => a+b, 0) / visibleScores.length;
+
+    const lastPrice = c5m.at(-1);
+    const risk = calculatePullbackRisk({ r: r5m }, { r: r1d }, k5m);
+
+    const levels1d = findKeyLevels(k1d, 30);
+    const levels5m = findKeyLevels(k5m, 50);
+    const allLevels = {
+      supports: [...levels1d.supports, ...levels5m.supports].sort((a,b) => b.strength - a.strength).slice(0, 5),
+      resistances: [...levels1d.resistances, ...levels5m.resistances].sort((a,b) => b.strength - a.strength).slice(0, 5),
+    };
+    const plan = buildTradePlan(lastPrice, k5m, k1d, risk, allLevels);
+
+    const nearSupports = allLevels.supports
+      .filter(s => s.price < lastPrice).sort((a,b) => b.price - a.price).slice(0, 3);
+    const nearResistances = allLevels.resistances
+      .filter(r => r.price > lastPrice).sort((a,b) => a.price - b.price).slice(0, 3);
+
+    const criteria = evaluateCriteria(sym, chg24h, vol, t1d, r1d, t5m, r5m, p5m, v5m, s1d, s5m, t1m, s1m);
+    const passedCount = criteria.filter(c => c.pass).length;
+    const totalChecks = criteria.length;
+    const passes = passedCount === totalChecks;
+
+    // Genel yorum üret — tüm zaman dilimlerini birlikte değerlendirir
+    const overallComment = generateOverallComment({
+      symbol: sym, combinedScore, passes, passedCount, totalChecks,
+      t1d, t5m, t3m, t1m, r5m, r3m, r1m,
+      p5m, p3m, p1m, v5m, risk
+    });
+
+    const opp = {
+      type: 'manual',
+      symbol: sym, chg24h, vol,
+      s1d, s5m, s3m, s1m, combinedScore,
+      sig1d, sig5m, sig3m, sig1m,
+      cmt1d, cmt5m, cmt3m, cmt1m,
+      t1d, t5m, t3m, t1m, r1d, r5m, r3m, r1m,
+      p1d: p1d.l, p5m: p5m.l, p3m: p3m?.l, p1m: p1m?.l,
+      p5mSig: p5m.s, p3mSig: p3m?.s, p1mSig: p1m?.s, p1dSig: p1d.s,
+      v1dLabel: v1d.l, v5mLabel: v5m.l, v3mLabel: v3m?.l, v1mLabel: v1m?.l,
+      overallComment,
+      risk, plan, lastPrice,
+      nearSupports, nearResistances,
+      criteria, passedCount, totalChecks, passes,
+      timestamp: Date.now()
+    };
+
+    renderManualResult(opp);
+    saveToArchive(opp);
+  } catch(e) {
+    resultEl.innerHTML = `<div class="empty" style="margin-top:10px;color:var(--bear)">⚠ Hata: ${e.message}<br><span style="font-size:11px;color:var(--muted)">Sembol Binance Futures'ta olmayabilir veya proxy yanıt vermedi.</span></div>`;
+  }
+}
+
+document.getElementById('manualCoin').addEventListener('keydown', e => {
+  if (e.key === 'Enter') analyzeManualCoin();
+});
+
+// ── SHORT SCORING ─────────────────────────────────────────
+// Long skorunun aksi değil — short'a özel mantık
+function calculateShortScore(t, r, p, v) {
+  let score = 50;
+
+  // 1) Trend (bear için)
+  if (t.d === "bear") score += 12 + (t.strength * 7);
+  else if (t.d === "bull") score -= 12 + (t.strength * 7);
+
+  // 2) Bear formasyon
+  const patternWeights = {
+    "Bear Engulfing": 20, "Kayan Yıldız": 18, "Güçlü Kırmızı": 16,
+    "Bull Engulfing": -20, "Çekiç": -16, "Güçlü Yeşil": -18,
+    "Yükseliş": -8, "Düşüş": 8,
+    "Doji": 0, "Spinning Top": 0
+  };
+  score += (patternWeights[p.l] || 0);
+
+  // 3) RSI — short için aşırı alım kötü (kovalama), ama dönüş arıyoruz
+  // 70-80 arası en iyi giriş bölgesi (aşırı alım, dönmek üzere)
+  if (r !== null) {
+    if (r > 85) score += 8;        // çok aşırı alım, dönüş yakın
+    else if (r > 75) score += 14;  // ideal short bölgesi
+    else if (r > 65) score += 8;
+    else if (r >= 50) score -= 4;
+    else if (r >= 35) score -= 10; // RSI düşmüş, satılmış, short geç
+    else score -= 15;              // çok satılmış, dip yakın, short kaçtı
+  }
+
+  // 4) Hacim — yüksek hacim dönüş anlamına gelebilir, ama zayıf hacim ralliler easy short
+  if (v.mult > 1.5 && score > 50) {
+    score += 5;  // güçlü hacim short sinyalini onaylar
+  } else if (v.mult < 0.6 && score > 50) {
+    score += 3;  // düşük hacim ralli = sahte ralli, kolay short
+  }
+
+  return Math.round(Math.max(0, Math.min(100, score)));
+}
+
+// ── FEAR & GREED ──────────────────────────────────────────
+let FNG_CACHE = { value: null, classification: null, timestamp: 0 };
+async function fetchFearGreed() {
+  // 30 dk cache
+  if (FNG_CACHE.value !== null && (Date.now() - FNG_CACHE.timestamp) < 30 * 60 * 1000) {
+    return FNG_CACHE;
+  }
+  try {
+    // alternative.me public API, CORS açık
+    const r = await fetch('https://api.alternative.me/fng/?limit=1');
+    if (!r.ok) throw new Error('FNG fetch failed');
+    const d = await r.json();
+    if (!d.data || !d.data[0]) throw new Error('FNG no data');
+    const v = +d.data[0].value;
+    const cls = d.data[0].value_classification;
+    FNG_CACHE = { value: v, classification: cls, timestamp: Date.now() };
+    return FNG_CACHE;
+  } catch(e) {
+    console.warn('FNG failed:', e);
+    return { value: null, classification: null, error: e.message };
+  }
+}
+
+function fngColor(v) {
+  if (v === null) return 'var(--neut)';
+  if (v >= 75) return 'var(--bear)';   // Extreme Greed → short fırsatı
+  if (v >= 55) return 'var(--warn)';   // Greed
+  if (v >= 45) return 'var(--neut)';   // Neutral
+  if (v >= 25) return 'var(--info)';   // Fear
+  return 'var(--bull)';                 // Extreme Fear → long fırsatı
+}
+
+function fngTrLabel(cls) {
+  return {
+    'Extreme Greed': 'Aşırı Açgözlülük',
+    'Greed': 'Açgözlülük',
+    'Neutral': 'Nötr',
+    'Fear': 'Korku',
+    'Extreme Fear': 'Aşırı Korku'
+  }[cls] || cls || '—';
+}
+
+// SHORT için risk: ralli çıkışı (squeeze) riski
+function calculateSqueezeRisk(d5m, d1d, last5mCandles) {
+  let riskPct = 30;
+  const factors = [];
+
+  // RSI çok aşırıysa squeeze riski yüksek
+  if (d5m.r > 80) { riskPct += 18; factors.push('5m RSI çok yüksek'); }
+  else if (d5m.r > 70) { riskPct += 10; }
+
+  // Son mumlar art arda kırmızıysa düşüş momentumu zayıflıyor olabilir
+  const last3 = last5mCandles.slice(-3);
+  const redCount = last3.filter(c => c.c < c.o).length;
+  if (redCount === 3) { riskPct += 8; factors.push('3 art arda kırmızı (squeeze yakın)'); }
+
+  // 1D RSI da aşırı yüksekse pump devam edebilir (short erken)
+  if (d1d.r > 75) { riskPct += 15; factors.push('1D pump tam tamamlanmamış'); }
+
+  // Volatilite
+  const ranges = last5mCandles.slice(-5).map(c => (c.h - c.l) / c.c);
+  const avgRange = ranges.reduce((a,b) => a+b, 0) / ranges.length;
+  if (avgRange > 0.025) { riskPct += 10; factors.push('Yüksek volatilite'); }
+
+  riskPct = Math.max(5, Math.min(85, riskPct));
+
+  let level, pullbackPct;
+  if (riskPct < 30) { level = { l: 'Düşük', cls: 'risk-low' }; pullbackPct = 0.5; }
+  else if (riskPct < 55) { level = { l: 'Orta', cls: 'risk-med' }; pullbackPct = 1.2; }
+  else { level = { l: 'Yüksek', cls: 'risk-high' }; pullbackPct = 2.5; }
+
+  return { pct: Math.round(riskPct), pullbackPct, ...level, factors };
+}
+
+// Short trade plan: entry yukarıda (ralli'ye satarız), stop daha yukarıda, hedef aşağıda
+function buildShortTradePlan(currentPrice, candles5m, candles1d, risk, levels) {
+  // 1) Entry: ralliye satarız → mevcut fiyatın hafif üstünde veya yakın direnç
+  let entry, entryNote = '';
+
+  const resistancesAbove = levels.resistances.filter(r => r.price > currentPrice && r.price < currentPrice * 1.03);
+  const nearestRes = resistancesAbove.length > 0
+    ? resistancesAbove.reduce((a,b) => Math.abs(a.price-currentPrice) < Math.abs(b.price-currentPrice) ? a : b)
+    : null;
+
+  if (risk.l === 'Düşük') {
+    entry = currentPrice * 1.003;
+    entryNote = 'Hızlı short, küçük ralli bekle';
+  } else if (risk.l === 'Orta') {
+    if (nearestRes && Math.abs(nearestRes.price - currentPrice)/currentPrice < 0.018) {
+      entry = nearestRes.price * 0.999;
+      entryNote = 'Yakın direncin altı';
+    } else {
+      entry = currentPrice * (1 + risk.pullbackPct/100);
+      entryNote = `~%${risk.pullbackPct} rally bekle`;
+    }
+  } else {
+    if (nearestRes) {
+      entry = nearestRes.price * 0.999;
+      entryNote = 'Dirence kadar rally bekle';
+    } else {
+      entry = currentPrice * (1 + risk.pullbackPct/100);
+      entryNote = `~%${risk.pullbackPct} rally bekle`;
+    }
+  }
+
+  // 2) Stop: entry'nin üstünde — son swing high veya %0.5-1 yukarı
+  const swingHigh5m = findSwingHigh(candles5m, 20);
+  let stop = Math.max(swingHigh5m * 1.003, entry * 1.008);
+
+  const stopDistPct = ((stop - entry) / entry) * 100;
+  if (stopDistPct > 1.5) {
+    stop = entry * 1.01;
+  } else if (stopDistPct < 0.4) {
+    stop = entry * 1.005;
+  }
+
+  // 3) 3 Hedef (aşağı)
+  const finalStopDist = stop - entry;
+  const target1R1 = entry - finalStopDist;
+  const target1R2 = entry - finalStopDist * 2;
+  const target1R3 = entry - finalStopDist * 3;
+
+  const supportsBelow = levels.supports.filter(s => s.price < entry * 0.997).sort((a,b) => b.price - a.price);
+  const swingLow1d = findSwingLow(candles1d, 30);
+
+  let t1, t1Note;
+  if (supportsBelow.length > 0 && supportsBelow[0].price > target1R2) {
+    t1 = supportsBelow[0].price * 1.002;
+    t1Note = `1. destek`;
+  } else {
+    t1 = target1R1;
+    t1Note = `1:1 R:R`;
+  }
+
+  let t2, t2Note;
+  if (supportsBelow.length > 1 && supportsBelow[1].price < t1 && supportsBelow[1].price > target1R3) {
+    t2 = supportsBelow[1].price * 1.002;
+    t2Note = `2. destek`;
+  } else if (supportsBelow.length > 0 && supportsBelow[0].price < t1 * 0.995 && supportsBelow[0].price > target1R3) {
+    t2 = supportsBelow[0].price * 1.002;
+    t2Note = `Destek`;
+  } else {
+    t2 = target1R2;
+    t2Note = `1:2 R:R`;
+  }
+
+  let t3, t3Note;
+  if (supportsBelow.length > 2 && supportsBelow[2].price < t2) {
+    t3 = supportsBelow[2].price * 1.002;
+    t3Note = `3. destek`;
+  } else if (swingLow1d < t2 * 0.995 && swingLow1d > target1R3 * 0.8) {
+    t3 = swingLow1d * 1.002;
+    t3Note = `1D swing low`;
+  } else {
+    t3 = target1R3;
+    t3Note = `1:3 R:R`;
+  }
+
+  if (t2 >= t1) { t2 = t1 - finalStopDist * 0.5; t2Note = `${t1Note} -`; }
+  if (t3 >= t2) { t3 = t2 - finalStopDist * 0.5; t3Note = `${t2Note} -`; }
+
+  const stopPct = ((stop - entry) / entry) * 100;
+  const t1Pct = ((t1 - entry) / entry) * 100;
+  const t2Pct = ((t2 - entry) / entry) * 100;
+  const t3Pct = ((t3 - entry) / entry) * 100;
+
+  return {
+    entry, stop, entryNote,
+    t1, t2, t3,
+    t1Note, t2Note, t3Note,
+    t1Pct: t1Pct.toFixed(2),
+    t2Pct: t2Pct.toFixed(2),
+    t3Pct: t3Pct.toFixed(2),
+    currentPrice,
+    waitForRally: entry > currentPrice * 1.001,
+    stopPct: stopPct.toFixed(2),
+    target: t2,
+    targetPct: t2Pct.toFixed(2),
+    targetNote: t2Note,
+    rr: Math.abs(t2Pct / stopPct).toFixed(2),
+    isShort: true
+  };
+}
+
+const SHORT_SCANNER_CONFIG = {
+  minQuoteVolume: 5_000_000,
+  minChg24h: 8,           // En az %8 pump'lamış (balon)
+  maxChg24h: 50,          // Çok aşırı uçukları al ama astronomik değil
+  minRSI5m: 70,           // Aşırı alımda olmalı
+  minScore: 65,
+  maxResults: 25,
+};
+
+async function runShortScanner() {
+  const progressEl = document.getElementById('shortScannerProgress');
+  const oppEl = document.getElementById('shortOpportunities');
+  const statsEl = document.getElementById('shortScannerStats');
+  const fngBanner = document.getElementById('fearGreedBanner');
+
+  progressEl.style.display = 'block';
+  progressEl.innerHTML = '<div class="scan-progress"><div class="step">0/5 · Fear & Greed Index alınıyor…</div></div>';
+  oppEl.innerHTML = '';
+
+  // Step 0: Fear & Greed
+  const fng = await fetchFearGreed();
+  if (fng.value !== null) {
+    const color = fngColor(fng.value);
+    const trLabel = fngTrLabel(fng.classification);
+    const shortFavorable = fng.value >= 65;
+    fngBanner.innerHTML = `
+      <div style="background:rgba(255,255,255,.02);border:1px solid ${color};border-radius:10px;padding:12px;margin-bottom:14px">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+          <div>
+            <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:3px">Crypto Fear & Greed Index</div>
+            <div style="font-size:14px;font-weight:700;color:${color}">${trLabel} (${fng.classification})</div>
+          </div>
+          <div style="font-family:'JetBrains Mono',monospace;font-weight:700;font-size:32px;color:${color}">${fng.value}</div>
+        </div>
+        <div style="margin-top:8px;font-size:12px;color:var(--muted);line-height:1.5">
+          ${shortFavorable
+            ? '🎯 <strong style="color:var(--bear)">SHORT için uygun ortam</strong> — piyasa açgözlü, tepe alım riski yüksek.'
+            : (fng.value < 35
+                ? '⚠️ <strong style="color:var(--bear)">SHORT için ZAYIF ortam</strong> — piyasa korku içinde, dip yapma riski. SHORT yerine LONG düşün.'
+                : '🟡 <strong style="color:var(--warn)">Nötr ortam</strong> — SHORT için ideal değil ama yine de fırsatlar olabilir.')}
+        </div>
+      </div>
+    `;
+  } else {
+    fngBanner.innerHTML = `<div style="background:rgba(255,255,255,.02);border:1px solid var(--border);border-radius:10px;padding:10px;margin-bottom:14px;font-size:12px;color:var(--muted)">⚠️ Fear & Greed Index alınamadı (${fng.error || 'bilinmeyen hata'})</div>`;
+  }
+
+  // Step 1: BTC durumu (SHORT için: BTC zayıfsa daha güçlü sinyal)
+  progressEl.innerHTML = '<div class="scan-progress"><div class="step">1/5 · BTC durumu kontrol ediliyor…</div></div>';
+  let btcContext = null;
+  try {
+    const [btc1d, btc5m] = await Promise.all([
+      fetchBinanceFutures('BTCUSDT', '1d'),
+      fetchBinanceFutures('BTCUSDT', '5m')
+    ]);
+    const btc5mCloses = btc5m.map(c => c.c);
+    const btcT1d = trend(btc1d);
+    const btcLast = btc5mCloses.at(-1);
+    const btcPrev1h = btc5mCloses.at(-12) || btc5mCloses[0];
+    const btcChg1h = ((btcLast - btcPrev1h) / btcPrev1h) * 100;
+    // SHORT için: BTC zayıf = ideal
+    const btcBearish = btcT1d.d === 'bear' || btcChg1h < -0.3;
+    btcContext = { t1d: btcT1d, chg1h: btcChg1h, bearish: btcBearish };
+  } catch(e) {
+    btcContext = { bearish: false, error: e.message };
+  }
+
+  // Step 2: Tickers
+  progressEl.innerHTML = '<div class="scan-progress"><div class="step">2/5 · Tickers alınıyor…</div></div>';
+  let tickers;
+  try {
+    const url = buildBinanceFuturesTickerUrl(null);
+    const r = await fetch(url, { method: 'GET', mode: 'cors' });
+    tickers = await r.json();
+  } catch(e) {
+    progressEl.innerHTML = `<div class="scan-progress"><div class="step" style="color:var(--bear)">❌ Ticker hatası: ${e.message}</div></div>`;
+    return;
+  }
+
+  // Pre-filter: pump etmiş, hacimli
+  const candidates = tickers
+    .filter(t => t.symbol.endsWith('USDT'))
+    .filter(t => +t.quoteVolume > SHORT_SCANNER_CONFIG.minQuoteVolume)
+    .filter(t => +t.priceChangePercent > SHORT_SCANNER_CONFIG.minChg24h)
+    .filter(t => +t.priceChangePercent < SHORT_SCANNER_CONFIG.maxChg24h)
+    .map(t => ({ symbol: t.symbol, chg24h: +t.priceChangePercent, vol: +t.quoteVolume }))
+    .sort((a,b) => b.chg24h - a.chg24h)  // En çok pump'lamış üstte
+    .slice(0, 60);
+
+  progressEl.innerHTML = `<div class="scan-progress"><div class="step">3/5 · Filtre: ${candidates.length} pump'lı aday</div><div class="detail">Hacim > $5M, 24s pump > %${SHORT_SCANNER_CONFIG.minChg24h}</div></div>`;
+
+  if (candidates.length === 0) {
+    progressEl.style.display = 'none';
+    oppEl.innerHTML = `
+      <div class="empty">
+        🔍 Pump'lamış coin yok — şu an SHORT için uygun aday yok.<br>
+        <span style="font-size:11px">Piyasa düşüş halinde olabilir, LONG tarayıcıyı dene.</span>
+      </div>
+    `;
+    return;
+  }
+
+  // Step 3: Detail scan
+  const results = [];
+  const total = candidates.length;
+  let done = 0;
+  let oppListReady = false;
+  function ensureOppList() {
+    if (oppListReady) return;
+    oppListReady = true;
+    oppEl.innerHTML = `
+      <div id="liveStatsShort" class="scanner-stats"></div>
+      <div id="oppListShort"></div>
+    `;
+  }
+  function renderPartialShort(isFinal) {
+    if (results.length === 0) return;
+    ensureOppList();
+    const sorted = [...results].sort((a,b) => b.combinedScore - a.combinedScore);
+    const top = sorted.slice(0, SHORT_SCANNER_CONFIG.maxResults);
+    document.getElementById('liveStatsShort').innerHTML = `
+      <div class="stat-row">
+        <span class="label">${isFinal ? '✅ Tarama bitti' : '⏳ Tarama devam ediyor…'}</span>
+        <span class="value">${done}/${total}</span>
+      </div>
+      <div class="stat-row"><span class="label">Bulunan fırsat</span><span class="value" style="color:var(--bear)">${results.length}</span></div>
+    `;
+    document.getElementById('oppListShort').innerHTML = top.map((opp, idx) => buildShortOpportunityCard(opp, idx)).join('');
+  }
+
+  const batchSize = 3;
+  for (let i = 0; i < candidates.length; i += batchSize) {
+    const batch = candidates.slice(i, i + batchSize);
+    await Promise.all(batch.map(async c => {
+      try {
+        const [k1d, k5m] = await Promise.all([
+          fetchBinanceFutures(c.symbol, '1d'),
+          fetchBinanceFutures(c.symbol, '5m')
+        ]);
+        if (k1d.length < 21 || k5m.length < 21) { done++; return; }
+
+        const c1d = k1d.map(x=>x.c);
+        const c5m = k5m.map(x=>x.c);
+
+        const t1d = trend(k1d), r1d = rsi(c1d), p1d = pattern(k1d), v1d = volTrend(k1d);
+        const t5m = trend(k5m), r5m = rsi(c5m), p5m = pattern(k5m), v5m = volTrend(k5m);
+
+        const s1d = calculateShortScore(t1d, r1d, p1d, v1d);
+        const s5m = calculateShortScore(t5m, r5m, p5m, v5m);
+
+        // SHORT kriterleri
+        const checks = {
+          rsiHigh: r5m !== null && r5m > SHORT_SCANNER_CONFIG.minRSI5m,
+          bearPattern: ['Bear Engulfing','Kayan Yıldız','Güçlü Kırmızı','Düşüş','Doji'].includes(p5m.l),
+          pumped: c.chg24h > SHORT_SCANNER_CONFIG.minChg24h,
+          score1dOk: s1d >= SHORT_SCANNER_CONFIG.minScore,
+          score5mOk: s5m >= SHORT_SCANNER_CONFIG.minScore,
+        };
+        const passes = Object.values(checks).every(Boolean);
+
+        if (passes) {
+          const lastPrice = c5m.at(-1);
+          const risk = calculateSqueezeRisk({ r: r5m }, { r: r1d }, k5m);
+          const levels1d = findKeyLevels(k1d, 30);
+          const levels5m = findKeyLevels(k5m, 50);
+          const allLevels = {
+            supports: [...levels1d.supports, ...levels5m.supports].sort((a,b) => b.strength - a.strength).slice(0, 5),
+            resistances: [...levels1d.resistances, ...levels5m.resistances].sort((a,b) => b.strength - a.strength).slice(0, 5),
+          };
+          const plan = buildShortTradePlan(lastPrice, k5m, k1d, risk, allLevels);
+          const combinedScore = (s1d + s5m) / 2;
+
+          const nearSupports = allLevels.supports
+            .filter(s => s.price < lastPrice).sort((a,b) => b.price - a.price).slice(0, 3);
+          const nearResistances = allLevels.resistances
+            .filter(r => r.price > lastPrice).sort((a,b) => a.price - b.price).slice(0, 3);
+
+          results.push({
+            symbol: c.symbol, chg24h: c.chg24h, vol: c.vol,
+            s1d, s5m, combinedScore,
+            t1d, t5m, r1d, r5m,
+            p1d: p1d.l, p5m: p5m.l, p5mSig: p5m.s,
+            v5mLabel: v5m.l,
+            risk, plan, lastPrice,
+            nearSupports, nearResistances,
+            fngFavorable: fng.value !== null && fng.value >= 65,
+            btcFavorable: btcContext.bearish,
+            isShort: true
+          });
+        }
+      } catch(e) {}
+      done++;
+      progressEl.innerHTML = `<div class="scan-progress"><div class="step">4/5 · Tarama: ${done}/${total}</div><div class="detail">${results.length} fırsat bulundu</div></div>`;
+    }));
+    renderPartialShort(false);
+  }
+
+  // Final
+  results.sort((a,b) => b.combinedScore - a.combinedScore);
+  const top = results.slice(0, SHORT_SCANNER_CONFIG.maxResults);
+  progressEl.style.display = 'none';
+
+  if (top.length > 0) {
+    saveScanResultsToArchive(top.map(o => ({ ...o, isShort: true })), { scanned: total, found: results.length, isShort: true });
+  }
+
+  statsEl.innerHTML = `
+    <div class="scanner-stats" style="border-color:var(--bear)">
+      <div class="stat-row"><span class="label">Pump'lı aday</span><span class="value">${total}</span></div>
+      <div class="stat-row"><span class="label">SHORT fırsatı</span><span class="value" style="color:var(--bear)">${results.length}</span></div>
+      <div class="stat-row"><span class="label">Son tarama</span><span class="value" style="font-size:11px">${new Date().toLocaleTimeString('tr-TR')}</span></div>
+    </div>
+  `;
+
+  if (top.length === 0) {
+    oppEl.innerHTML = `<div class="empty">🔍 SHORT kriterlerine uyan fırsat yok.<br><span style="font-size:11px">Şu an pump'lı ama dönüş sinyali veren coin yok.</span></div>`;
+    document.getElementById('updated').textContent = 'Tarama: ' + new Date().toLocaleTimeString('tr-TR');
+    return;
+  }
+
+  if (oppListReady) {
+    document.getElementById('liveStatsShort').innerHTML = `
+      <div class="stat-row"><span class="label">✅ Tarama tamamlandı</span><span class="value">${total}/${total}</span></div>
+      <div class="stat-row"><span class="label">SHORT fırsatı</span><span class="value" style="color:var(--bear)">${results.length}</span></div>
+    `;
+    document.getElementById('oppListShort').innerHTML = top.map((opp, idx) => buildShortOpportunityCard(opp, idx)).join('');
+  } else {
+    oppEl.innerHTML = top.map((opp, idx) => buildShortOpportunityCard(opp, idx)).join('');
+  }
+
+  document.getElementById('updated').textContent = 'Tarama: ' + new Date().toLocaleTimeString('tr-TR');
+}
+
+function buildShortOpportunityCard(opp, idx) {
+  const p = opp.plan;
+  const supRows = opp.nearSupports.length > 0
+    ? opp.nearSupports.map(s => {
+        const distPct = ((opp.lastPrice - s.price)/opp.lastPrice*100).toFixed(2);
+        const strength = '●'.repeat(Math.min(s.strength, 3));
+        return `<div class="level-row sup"><span>${fmtPrice(s.price)}</span><span class="dist">-${distPct}%</span><span class="strength">${strength}</span></div>`;
+      }).join('')
+    : '<div class="level-row" style="color:var(--muted)">Yakın destek yok</div>';
+
+  const resRows = opp.nearResistances.length > 0
+    ? opp.nearResistances.map(r => {
+        const distPct = ((r.price - opp.lastPrice)/opp.lastPrice*100).toFixed(2);
+        const strength = '●'.repeat(Math.min(r.strength, 3));
+        return `<div class="level-row res"><span>${fmtPrice(r.price)}</span><span class="dist">+${distPct}%</span><span class="strength">${strength}</span></div>`;
+      }).join('')
+    : '<div class="level-row" style="color:var(--muted)">Yakın direnç yok</div>';
+
+  const rankBadge = (idx !== null && idx !== undefined)
+    ? `<span class="opp-rank" style="background:var(--bear)">#${idx+1}</span>` : '';
+
+  return `
+    <div class="opp-card" style="border-left-color:var(--bear)">
+      <div class="opp-head">
+        <div>
+          ${rankBadge}
+          <span class="opp-sym">${opp.symbol}</span>
+          <span class="src-badge" style="margin-left:4px;color:var(--bear);border-color:rgba(239,68,68,.3)">24s +${opp.chg24h.toFixed(2)}% PUMP</span>
+        </div>
+        <span class="risk-badge ${opp.risk.cls}">Squeeze: ${opp.risk.l} (%${opp.risk.pct})</span>
+      </div>
+
+      <div class="opp-scores">
+        <div class="opp-score-pill">
+          <div class="lbl">1D SHORT</div>
+          <div class="num" style="color:var(--bear)">${opp.s1d}</div>
+        </div>
+        <div class="opp-score-pill">
+          <div class="lbl">5m SHORT</div>
+          <div class="num" style="color:var(--bear)">${opp.s5m}</div>
+        </div>
+        <div class="opp-score-pill">
+          <div class="lbl">Birleşik</div>
+          <div class="num" style="color:var(--accent)">${opp.combinedScore.toFixed(0)}</div>
+        </div>
+      </div>
+
+      <div class="levels-grid">
+        <div class="levels-col">
+          <div class="levels-title res-title">🔴 Direnç (Giriş)</div>
+          ${resRows}
+        </div>
+        <div class="levels-col">
+          <div class="levels-title sup-title">🟢 Destek (Hedef)</div>
+          ${supRows}
+        </div>
+      </div>
+
+      <div class="trade-plan" style="background:rgba(239,68,68,.05);border-color:rgba(239,68,68,.2)">
+        <div class="trade-plan-title" style="color:var(--bear)">📋 SHORT İşlem Planı</div>
+        <div class="trade-row"><span class="k">Mevcut fiyat</span><span class="v">${fmtPrice(opp.lastPrice)}</span></div>
+        <div class="trade-row" style="background:rgba(239,68,68,.1);margin:4px -4px;padding:6px;border-radius:4px">
+          <span class="k" style="color:var(--bear);font-weight:700">🩸 Tahmini SHORT Girişi</span>
+          <span class="v" style="color:var(--bear)">${fmtPrice(p.entry)} ${p.waitForRally ? '(ralliye bekle)' : ''}</span>
+        </div>
+        <div class="trade-row" style="font-size:11px;color:var(--muted);margin-top:-2px">
+          <span></span><span>${p.entryNote || ''}</span>
+        </div>
+        <div class="trade-row"><span class="k">Stop-loss (yukarıda)</span><span class="v" style="color:var(--warn)">${fmtPrice(p.stop)} (+${p.stopPct}%)</span></div>
+        <div class="trade-row"><span class="k">🎯 T1 <span style="font-size:10px;color:var(--muted)">${p.t1Note}</span></span><span class="v" style="color:var(--bull)">${fmtPrice(p.t1)} (${p.t1Pct}%)</span></div>
+        <div class="trade-row"><span class="k">🎯 T2 <span style="font-size:10px;color:var(--muted)">${p.t2Note}</span></span><span class="v" style="color:var(--bull)">${fmtPrice(p.t2)} (${p.t2Pct}%)</span></div>
+        <div class="trade-row"><span class="k">🎯 T3 <span style="font-size:10px;color:var(--muted)">${p.t3Note}</span></span><span class="v" style="color:var(--bull)">${fmtPrice(p.t3)} (${p.t3Pct}%)</span></div>
+        <div class="trade-row"><span class="k">R:R (T2'ye)</span><span class="v" style="color:var(--accent)">1 : ${p.rr}</span></div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:6px;font-size:11.5px;color:var(--muted)">
+        <div>📉 1D: ${opp.t1d.l} · RSI ${opp.r1d}</div>
+        <div>⏱️ 5m: ${opp.t5m.l} · RSI ${opp.r5m}</div>
+        <div>🕯️ Formasyon: <span style="color:var(--bear)">${opp.p5m}</span></div>
+        <div>📊 Hacim: ${opp.v5mLabel}</div>
+      </div>
+
+      ${opp.fngFavorable ? '<div style="margin-top:8px;font-size:11px;color:var(--bear);background:rgba(239,68,68,.06);padding:4px 8px;border-radius:4px">🎯 F&G greed bölgesinde — SHORT için ekstra teyit</div>' : ''}
+      ${opp.btcFavorable ? '<div style="margin-top:4px;font-size:11px;color:var(--bear);background:rgba(239,68,68,.06);padding:4px 8px;border-radius:4px">🎯 BTC zayıf — SHORT için ekstra teyit</div>' : ''}
+
+      ${opp.risk.factors.length > 0 ? `
+        <div style="margin-top:8px;font-size:11px;color:var(--warn)">
+          ⚠️ Squeeze riskleri: ${opp.risk.factors.join(' · ')}
+        </div>
+      ` : ''}
+    </div>
+  `;
+}
+
+// ── PAGE NAVIGATION ────────────────────────────────────────
+let currentPage = "watch";
+let scannerData = { lastRun: null, opportunities: [], stats: {} };
+
+document.querySelectorAll('.page-tab').forEach(btn => {
+  btn.onclick = () => {
+    currentPage = btn.dataset.page;
+    document.querySelectorAll('.page-tab').forEach(b => b.classList.toggle('active', b === btn));
+    document.querySelectorAll('.page').forEach(p => p.classList.toggle('active', p.id === 'page-'+currentPage));
+    if (currentPage === 'scanner' && scannerData.opportunities.length === 0 && !scannerData.lastRun) {
+      runScanner();
+    }
+    if (currentPage === 'shortScanner' && !shortScannerStarted) {
+      shortScannerStarted = true;
+      runShortScanner();
+    }
+    if (currentPage === 'manual') {
+      renderArchive();
+    }
+  };
+});
+
+let shortScannerStarted = false;
+
+function loadCurrentPage() {
+  if (currentPage === 'watch') loadAll();
+  else if (currentPage === 'scanner') runScanner();
+  else if (currentPage === 'shortScanner') runShortScanner();
+  else if (currentPage === 'manual') {
+    const v = document.getElementById('manualCoin').value;
+    if (v) analyzeManualCoin();
+  }
+}
+
+// ── LONG SCANNER ───────────────────────────────────────────
+const SCANNER_CONFIG = {
+  minQuoteVolume: 5_000_000,    // 5M USDT günlük hacim
+  maxChg24h: 10,                 // %10'dan fazla pump'lamış olanları at
+  minChg24h: -15,                // çok dipte olanları da at
+  minScore: 65,                  // 1m ve 5m skoru en az
+  maxRSI5m: 65,                  // 5m RSI eşiği
+  minVolMult: 0.7,               // Hacim çarpanı eşiği (normal/yüksek)
+  maxResults: 25,                // En fazla 25 fırsat göster
+};
+
+// Detect recent swing low for stop placement (basit: son 20 mumun en düşüğü)
+function findSwingLow(candles, lookback = 20) {
+  const recent = candles.slice(-lookback);
+  return Math.min(...recent.map(c => c.l));
+}
+
+// Detect recent swing high for target placement
+function findSwingHigh(candles, lookback = 20) {
+  const recent = candles.slice(-lookback);
+  return Math.max(...recent.map(c => c.h));
+}
+
+// Pivot-based support/resistance: yerel min/max'leri bul, kümele
+function findKeyLevels(candles, lookback = 40) {
+  const data = candles.slice(-lookback);
+  const pivotsLow = [];
+  const pivotsHigh = [];
+
+  // 3-bar pivot: ortanca mum solundakı 2 + sağındakı 2 mumdan extreme ise pivot
+  for (let i = 2; i < data.length - 2; i++) {
+    const c = data[i];
+    if (c.l <= data[i-1].l && c.l <= data[i-2].l && c.l <= data[i+1].l && c.l <= data[i+2].l) {
+      pivotsLow.push(c.l);
+    }
+    if (c.h >= data[i-1].h && c.h >= data[i-2].h && c.h >= data[i+1].h && c.h >= data[i+2].h) {
+      pivotsHigh.push(c.h);
+    }
+  }
+
+  // Kümelendirme: %0.3'ten yakın pivot'ları birleştir
+  function cluster(values) {
+    if (values.length === 0) return [];
+    const sorted = [...values].sort((a,b) => a-b);
+    const clusters = [[sorted[0]]];
+    for (let i = 1; i < sorted.length; i++) {
+      const last = clusters[clusters.length-1];
+      const lastAvg = last.reduce((a,b)=>a+b,0)/last.length;
+      if (Math.abs(sorted[i] - lastAvg)/lastAvg < 0.003) last.push(sorted[i]);
+      else clusters.push([sorted[i]]);
+    }
+    return clusters.map(c => ({
+      price: c.reduce((a,b)=>a+b,0) / c.length,
+      strength: c.length
+    }));
+  }
+
+  return {
+    supports: cluster(pivotsLow).sort((a,b) => b.strength - a.strength),
+    resistances: cluster(pivotsHigh).sort((a,b) => b.strength - a.strength)
+  };
+}
+
+// Pullback risk: aşırı alımda mı, momentum tükeniyor mu?
+function calculatePullbackRisk(d5m, d1d, last5mCandles) {
+  let riskPct = 30; // başlangıç orta-düşük
+  const factors = [];
+
+  // RSI yüksekliği
+  if (d5m.r > 60) { riskPct += 15; factors.push('RSI yüksek'); }
+  else if (d5m.r < 40) { riskPct -= 10; }
+
+  // 5m'de son birkaç mum çok yeşil mi (kısa vade aşırı uzamış)?
+  const last3 = last5mCandles.slice(-3);
+  const greenCount = last3.filter(c => c.c > c.o).length;
+  if (greenCount === 3) { riskPct += 12; factors.push('3 art arda yeşil'); }
+
+  // 1D RSI çok yüksekse büyük resim de aşırı
+  if (d1d.r > 70) { riskPct += 15; factors.push('1D aşırı alım'); }
+
+  // Volatilite: son mumların aralığı genişlemiş mi
+  const ranges = last5mCandles.slice(-5).map(c => (c.h - c.l) / c.c);
+  const avgRange = ranges.reduce((a,b) => a+b, 0) / ranges.length;
+  if (avgRange > 0.02) { riskPct += 8; factors.push('Yüksek volatilite'); }
+
+  riskPct = Math.max(5, Math.min(85, riskPct));
+
+  let level, pullbackPct;
+  if (riskPct < 30) {
+    level = { l: 'Düşük', cls: 'risk-low' };
+    pullbackPct = 0.5;  // %0.5 geri çekilme beklenir
+  } else if (riskPct < 55) {
+    level = { l: 'Orta', cls: 'risk-med' };
+    pullbackPct = 1.2;  // %1.2 geri çekilme beklenir
+  } else {
+    level = { l: 'Yüksek', cls: 'risk-high' };
+    pullbackPct = 2.5;  // %2.5 geri çekilme beklenir
+  }
+
+  return { pct: Math.round(riskPct), pullbackPct, ...level, factors };
+}
+
+// Genel yorum üretici — tüm zaman dilimlerini birlikte değerlendirir
+function generateOverallComment(d) {
+  const parts = [];
+  const score = d.combinedScore;
+
+  // 1. Genel skor değerlendirmesi
+  if (score >= 70) {
+    parts.push(`Çok güçlü alım sinyali, kısa vadeli zaman dilimleri pozitif.`);
+  } else if (score >= 60) {
+    parts.push(`Pozitif görünüm, LONG açılabilir.`);
+  } else if (score >= 50) {
+    parts.push(`Karışık sinyaller, net yön belli değil.`);
+  } else if (score >= 40) {
+    parts.push(`Zayıf görünüm, hâlâ bekle.`);
+  } else {
+    parts.push(`Satıcılar baskın, LONG riskli.`);
+  }
+
+  // 2. Çoklu TF tutarlılığı
+  const tfTrends = [];
+  if (d.t1m) tfTrends.push({tf: '1m', dir: d.t1m.d});
+  if (d.t3m) tfTrends.push({tf: '3m', dir: d.t3m.d});
+  tfTrends.push({tf: '5m', dir: d.t5m.d});
+  const bullCount = tfTrends.filter(t => t.dir === 'bull').length;
+  const bearCount = tfTrends.filter(t => t.dir === 'bear').length;
+
+  if (bullCount === tfTrends.length) {
+    parts.push(`Tüm kısa TF'ler yukarı dönmüş — momentum güçlü.`);
+  } else if (bearCount === tfTrends.length) {
+    parts.push(`Tüm kısa TF'ler aşağı — LONG açma.`);
+  } else if (bullCount > bearCount) {
+    parts.push(`Çoğu kısa TF yukarı, ${bearCount} TF zayıf.`);
+  } else if (bearCount > bullCount) {
+    parts.push(`Çoğu kısa TF aşağı, sadece ${bullCount} pozitif.`);
+  } else {
+    parts.push(`Karışık TF görünümü — sabırlı ol.`);
+  }
+
+  // 3. RSI değerlendirmesi (en kritik TF olarak 5m)
+  if (d.r5m !== null) {
+    if (d.r5m > 75) {
+      parts.push(`5m RSI ${d.r5m} — aşırı alım, tepe alım riski yüksek.`);
+    } else if (d.r5m > 65) {
+      parts.push(`5m RSI ${d.r5m} — yüksek, sıkı stop koy.`);
+    } else if (d.r5m < 25) {
+      parts.push(`5m RSI ${d.r5m} — aşırı satım, tepki alımı uygun.`);
+    } else if (d.r5m < 35) {
+      parts.push(`5m RSI ${d.r5m} — satım bölgesinde.`);
+    }
+  }
+
+  // 4. 1m hızlı sinyal (varsa)
+  if (d.r1m !== null && d.r1m !== undefined) {
+    if (d.r1m > 80) {
+      parts.push(`1m'de aşırı pump, kısa vade dönüş gelebilir.`);
+    } else if (d.r1m < 20) {
+      parts.push(`1m'de aşırı satım, tepki yakın.`);
+    }
+  }
+
+  // 5. Formasyon vurgusu (5m en kritik)
+  const patternComments = {
+    "Bull Engulfing": "5m'de yutucu yeşil — agresif alıcı girişi.",
+    "Bear Engulfing": "5m'de yutucu kırmızı — sert satıcı.",
+    "Çekiç": "5m'de çekiç — düşüşten dönüş sinyali.",
+    "Kayan Yıldız": "5m'de kayan yıldız — tepe dönüş riski.",
+    "Güçlü Yeşil": "5m'de güçlü yeşil mum.",
+    "Güçlü Kırmızı": "5m'de güçlü kırmızı mum.",
+    "Doji": "5m doji — kararsızlık.",
+  };
+  if (patternComments[d.p5m]) parts.push(patternComments[d.p5m]);
+
+  // 6. Risk seviyesi
+  if (d.risk) {
+    if (d.risk.l === 'Düşük') {
+      parts.push(`Geri çekilme riski düşük, hızlı giriş yapılabilir.`);
+    } else if (d.risk.l === 'Yüksek') {
+      parts.push(`Geri çekilme riski yüksek — kovalama yapma, pullback bekle.`);
+    }
+  }
+
+  // 7. Pratik öneri
+  if (d.passes) {
+    parts.push(`Tüm kriterler geçti, ⭐ Optimal girişten LONG açılabilir.`);
+  } else if (d.passedCount >= d.totalChecks - 2) {
+    parts.push(`Çoğu kriter geçti, dikkatli pozisyon alınabilir.`);
+  } else if (d.passedCount < d.totalChecks / 2) {
+    parts.push(`Yetersiz kriter geçti — bu coinde LONG önerilmez.`);
+  }
+
+  return parts.join(" ");
+}
+
+// Trade plan: tek giriş — basit ve net
+function buildTradePlan(currentPrice, candles5m, candles1d, risk, levels) {
+  // 1) Önerilen giriş — risk seviyesine göre
+  let entry;
+  let entryNote = '';
+
+  const supportsBelow = levels.supports.filter(s => s.price < currentPrice && s.price > currentPrice * 0.97);
+  const nearestSupport = supportsBelow.length > 0
+    ? supportsBelow.reduce((a,b) => Math.abs(a.price-currentPrice) < Math.abs(b.price-currentPrice) ? a : b)
+    : null;
+
+  if (risk.l === 'Düşük') {
+    entry = currentPrice * 0.997;
+    entryNote = 'Pullback küçük, hızlı gir';
+  } else if (risk.l === 'Orta') {
+    if (nearestSupport && Math.abs(nearestSupport.price - currentPrice)/currentPrice < 0.018) {
+      entry = nearestSupport.price * 1.001;
+      entryNote = `Yakın desteğin üstü`;
+    } else {
+      entry = currentPrice * (1 - risk.pullbackPct/100);
+      entryNote = `~%${risk.pullbackPct} geri çekilme bekle`;
+    }
+  } else {
+    if (nearestSupport) {
+      entry = nearestSupport.price * 1.001;
+      entryNote = 'Desteğe çekilmeyi bekle';
+    } else {
+      entry = currentPrice * (1 - risk.pullbackPct/100);
+      entryNote = `~%${risk.pullbackPct} geri çekilme bekle`;
+    }
+  }
+
+  // 2) Stop
+  const swingLow5m = findSwingLow(candles5m, 20);
+  let stop = Math.min(swingLow5m * 0.997, entry * 0.992);
+
+  const stopDistPct = ((entry - stop) / entry) * 100;
+  if (stopDistPct > 1.5) {
+    stop = entry * 0.99;
+  } else if (stopDistPct < 0.4) {
+    stop = entry * 0.995;
+  }
+
+  // 3) 3 Hedef seviyesi (T1, T2, T3 hâlâ duruyor — entry sadece tek)
+  const finalStopDist = entry - stop;
+  const target1R1 = entry + finalStopDist;
+  const target1R2 = entry + finalStopDist * 2;
+  const target1R3 = entry + finalStopDist * 3;
+
+  const resistancesAbove = levels.resistances.filter(r => r.price > entry * 1.003).sort((a,b) => a.price - b.price);
+  const swingHigh1d = findSwingHigh(candles1d, 30);
+
+  let t1, t1Note;
+  if (resistancesAbove.length > 0 && resistancesAbove[0].price < target1R2) {
+    t1 = resistancesAbove[0].price * 0.998;
+    t1Note = `1. direnç`;
+  } else {
+    t1 = target1R1;
+    t1Note = `1:1 R:R`;
+  }
+
+  let t2, t2Note;
+  if (resistancesAbove.length > 1 && resistancesAbove[1].price > t1 && resistancesAbove[1].price < target1R3) {
+    t2 = resistancesAbove[1].price * 0.998;
+    t2Note = `2. direnç`;
+  } else if (resistancesAbove.length > 0 && resistancesAbove[0].price > t1 * 1.005 && resistancesAbove[0].price < target1R3) {
+    t2 = resistancesAbove[0].price * 0.998;
+    t2Note = `Direnç`;
+  } else {
+    t2 = target1R2;
+    t2Note = `1:2 R:R`;
+  }
+
+  let t3, t3Note;
+  if (resistancesAbove.length > 2 && resistancesAbove[2].price > t2) {
+    t3 = resistancesAbove[2].price * 0.998;
+    t3Note = `3. direnç`;
+  } else if (swingHigh1d > t2 * 1.005 && swingHigh1d < target1R3 * 1.2) {
+    t3 = swingHigh1d * 0.998;
+    t3Note = `1D swing high`;
+  } else {
+    t3 = target1R3;
+    t3Note = `1:3 R:R`;
+  }
+
+  if (t2 <= t1) { t2 = t1 + finalStopDist * 0.5; t2Note = `${t1Note} +`; }
+  if (t3 <= t2) { t3 = t2 + finalStopDist * 0.5; t3Note = `${t2Note} +`; }
+
+  const stopPct = ((stop - entry) / entry) * 100;
+  const t1Pct = ((t1 - entry) / entry) * 100;
+  const t2Pct = ((t2 - entry) / entry) * 100;
+  const t3Pct = ((t3 - entry) / entry) * 100;
+
+  return {
+    entry, stop,
+    entryNote,
+    t1, t2, t3,
+    t1Note, t2Note, t3Note,
+    t1Pct: t1Pct.toFixed(2),
+    t2Pct: t2Pct.toFixed(2),
+    t3Pct: t3Pct.toFixed(2),
+    currentPrice,
+    waitForPullback: entry < currentPrice * 0.999,
+    stopPct: stopPct.toFixed(2),
+    target: t2,
+    targetPct: t2Pct.toFixed(2),
+    targetNote: t2Note,
+    rr: Math.abs(t2Pct / stopPct).toFixed(2)
+  };
+}
+
+function fmtPrice(p) {
+  if (p >= 100) return p.toFixed(2);
+  if (p >= 1) return p.toFixed(4);
+  if (p >= 0.01) return p.toFixed(5);
+  return p.toFixed(7);
+}
+
+async function runScanner() {
+  const progressEl = document.getElementById('scannerProgress');
+  const oppEl = document.getElementById('opportunities');
+  const statsEl = document.getElementById('scannerStats');
+
+  progressEl.style.display = 'block';
+  progressEl.innerHTML = '<div class="scan-progress"><div class="step">0/5 · BTC durumu kontrol ediliyor…</div><div class="detail">Piyasa yönü</div></div>';
+  oppEl.innerHTML = '';
+
+  // Step 0: BTC market context check
+  let btcContext = null;
+  try {
+    const [btc1d, btc5m] = await Promise.all([
+      fetchBinanceFutures('BTCUSDT', '1d'),
+      fetchBinanceFutures('BTCUSDT', '5m')
+    ]);
+    const btc1dCloses = btc1d.map(c => c.c);
+    const btc5mCloses = btc5m.map(c => c.c);
+    const btcT1d = trend(btc1d);
+    const btcT5m = trend(btc5m);
+    const btcR5m = rsi(btc5mCloses);
+    const btcLast = btc5mCloses.at(-1);
+    const btcPrev1h = btc5mCloses.at(-12) || btc5mCloses[0];
+    const btcChg1h = ((btcLast - btcPrev1h) / btcPrev1h) * 100;
+
+    // BTC son 1 saatte %0.5'den fazla düşüyorsa veya 1D trend aşağıysa LONG'a uygun değil
+    const btcBullish = btcT1d.d !== 'bear' && btcChg1h > -0.5;
+    btcContext = {
+      t1d: btcT1d,
+      t5m: btcT5m,
+      r5m: btcR5m,
+      chg1h: btcChg1h,
+      bullish: btcBullish,
+      veto: !btcBullish  // LONG'lara veto
+    };
+  } catch(e) {
+    console.warn('BTC check failed:', e);
+    btcContext = { bullish: true, veto: false, error: e.message };
+  }
+
+  // BTC veto varsa kullanıcıyı uyar ama yine de taramaya izin ver
+  if (btcContext.veto) {
+    progressEl.innerHTML = `
+      <div class="scan-progress" style="border-color:var(--bear);background:rgba(239,68,68,.05)">
+        <div class="step" style="color:var(--bear)">⚠️ BTC zayıf — LONG için uygun ortam değil</div>
+        <div class="detail">
+          1D trend: ${btcContext.t1d.l} · Son 1s: ${btcContext.chg1h.toFixed(2)}%
+          <br>Yine de taramaya devam ediliyor, fırsatları "BTC riski" etiketiyle göstereceğim.
+        </div>
+      </div>
+    `;
+    await new Promise(rs => setTimeout(rs, 1500));
+  } else {
+    progressEl.innerHTML = `
+      <div class="scan-progress">
+        <div class="step">✅ BTC sağlam · 1/5 Tickers alınıyor…</div>
+        <div class="detail">1D: ${btcContext.t1d.l} · Son 1s: ${btcContext.chg1h>=0?'+':''}${btcContext.chg1h.toFixed(2)}%</div>
+      </div>
+    `;
+  }
+
+  // Step 1: Get all 24hr tickers
+  let tickers;
+  try {
+    const url = `https://api.codetabs.com/v1/proxy/?quest=https://fapi.binance.com/fapi/v1/ticker/24hr`;
+    const r = await fetch(url, { method: 'GET', mode: 'cors' });
+    tickers = await r.json();
+  } catch(e) {
+    progressEl.innerHTML = `<div class="scan-progress"><div class="step" style="color:var(--bear)">❌ Ticker çekme hatası: ${e.message}</div></div>`;
+    return;
+  }
+
+  // Step 2: Pre-filter — pump etmemiş, hacimli
+  const candidates = tickers
+    .filter(t => t.symbol.endsWith('USDT'))
+    .filter(t => +t.quoteVolume > SCANNER_CONFIG.minQuoteVolume)
+    .filter(t => +t.priceChangePercent < SCANNER_CONFIG.maxChg24h)
+    .filter(t => +t.priceChangePercent > SCANNER_CONFIG.minChg24h)
+    .map(t => ({ symbol: t.symbol, chg24h: +t.priceChangePercent, vol: +t.quoteVolume }))
+    .sort((a,b) => b.vol - a.vol)  // Yüksek hacimliyi önce tara
+    .slice(0, 60);  // Rate limit için 60 coin max
+
+  progressEl.innerHTML = `<div class="scan-progress"><div class="step">2/5 · Filtre: ${candidates.length} aday</div><div class="detail">Hacim > $5M, 24s değişim %${SCANNER_CONFIG.minChg24h}–${SCANNER_CONFIG.maxChg24h}</div></div>`;
+
+  // Step 3: Fetch 1D + 5m + 1m klines for each candidate
+  const results = [];
+  const total = candidates.length;
+  let done = 0;
+
+  // İlk fırsat bulunduğunda sonuç alanını hazırla, sonra her batch'te güncelle
+  let oppListReady = false;
+  function ensureOppList() {
+    if (oppListReady) return;
+    oppListReady = true;
+    oppEl.innerHTML = `
+      <div id="liveStats" class="scanner-stats"></div>
+      <div id="oppList"></div>
+    `;
+  }
+
+  function renderOpportunities(isFinal) {
+    if (results.length === 0) return;
+    ensureOppList();
+    const sorted = [...results].sort((a,b) => b.combinedScore - a.combinedScore);
+    const top = sorted.slice(0, SCANNER_CONFIG.maxResults);
+
+    document.getElementById('liveStats').innerHTML = `
+      <div class="stat-row">
+        <span class="label">${isFinal ? '✅ Tarama bitti' : '⏳ Tarama devam ediyor…'}</span>
+        <span class="value">${done}/${total}</span>
+      </div>
+      <div class="stat-row">
+        <span class="label">Bulunan fırsat</span>
+        <span class="value" style="color:var(--bull)">${results.length}</span>
+      </div>
+      <div class="stat-row">
+        <span class="label">Gösterilen</span>
+        <span class="value">${top.length} (canlı sıralama)</span>
+      </div>
+    `;
+
+    document.getElementById('oppList').innerHTML = top.map((opp, idx) => buildOpportunityCard(opp, idx)).join('');
+  }
+
+  // Paralel ama küçük gruplar halinde (rate limit için)
+  const batchSize = 3;
+  for (let i = 0; i < candidates.length; i += batchSize) {
+    const batch = candidates.slice(i, i + batchSize);
+    await Promise.all(batch.map(async c => {
+      try {
+        const [k1d, k5m, k1m] = await Promise.all([
+          fetchBinanceFutures(c.symbol, '1d'),
+          fetchBinanceFutures(c.symbol, '5m'),
+          fetchBinanceFutures(c.symbol, '1m')
+        ]);
+        if (k1d.length < 21 || k5m.length < 21 || k1m.length < 21) { done++; return; }
+
+        const c1d = k1d.map(x=>x.c);
+        const c5m = k5m.map(x=>x.c);
+        const c1m = k1m.map(x=>x.c);
+
+        const t1d = trend(k1d), r1d = rsi(c1d), p1d = pattern(k1d), v1d = volTrend(k1d);
+        const t5m = trend(k5m), r5m = rsi(c5m), p5m = pattern(k5m), v5m = volTrend(k5m);
+        const t1m = trend(k1m), r1m = rsi(c1m), p1m = pattern(k1m), v1m = volTrend(k1m);
+
+        const s1d = calculateScore(t1d, r1d, p1d, v1d);
+        const s5m = calculateScore(t5m, r5m, p5m, v5m);
+        const s1m = calculateScore(t1m, r1m, p1m, v1m);
+
+        // ── YENİ LONG KRİTERLERİ (7 madde) ──────────────────
+        // Manuel analizdeki evaluateCriteria ile BİREBİR AYNI mantık
+        const bullPatterns = ['Bull Engulfing','Çekiç','Güçlü Yeşil','Yükseliş'];
+        const checks = {
+          // 1) Büyük resim sağlam: 1d, 5m ve 1m trend yukarı (bull)
+          trendAllBull: t1d.d === 'bull' && t5m.d === 'bull' && t1m.d === 'bull',
+          // 2) 5m RSI < 65 (aşırı alımda değil)
+          rsi5mOk: r5m !== null && r5m < SCANNER_CONFIG.maxRSI5m,
+          // 3) Bull formasyon var (5m son mum) ya da pattern sinyali bull
+          bullPattern: bullPatterns.includes(p5m.l) || p5m.s === 'bull',
+          // 4) Hacim normal veya yüksek
+          volOk: v5m.mult >= SCANNER_CONFIG.minVolMult,
+          // 5) Pump'lamamış: son 24s < %10
+          notPumped: c.chg24h < SCANNER_CONFIG.maxChg24h,
+          // 6) Dakikalık güçlü skor: 1m skor ≥ 65 ve 5m skor ≥ 65
+          score1mOk: s1m >= SCANNER_CONFIG.minScore,
+          score5mOk: s5m >= SCANNER_CONFIG.minScore,
+        };
+
+        const passes = Object.values(checks).every(Boolean);
+
+        if (passes) {
+          const lastPrice = c5m.at(-1);
+          const risk = calculatePullbackRisk(
+            { r: r5m },
+            { r: r1d },
+            k5m
+          );
+          // Destek/direnç hem 1D hem 5m'den çıkar, birleştir
+          const levels1d = findKeyLevels(k1d, 30);
+          const levels5m = findKeyLevels(k5m, 50);
+          const allLevels = {
+            supports: [...levels1d.supports, ...levels5m.supports]
+              .sort((a,b) => b.strength - a.strength).slice(0, 5),
+            resistances: [...levels1d.resistances, ...levels5m.resistances]
+              .sort((a,b) => b.strength - a.strength).slice(0, 5),
+          };
+          const plan = buildTradePlan(lastPrice, k5m, k1d, risk, allLevels);
+          const combinedScore = (s1d + s5m) / 2;
+
+          // En yakın 3 destek ve 3 direnç (mevcut fiyata göre)
+          const nearSupports = allLevels.supports
+            .filter(s => s.price < lastPrice)
+            .sort((a,b) => b.price - a.price)
+            .slice(0, 3);
+          const nearResistances = allLevels.resistances
+            .filter(r => r.price > lastPrice)
+            .sort((a,b) => a.price - b.price)
+            .slice(0, 3);
+
+          results.push({
+            symbol: c.symbol,
+            chg24h: c.chg24h,
+            vol: c.vol,
+            s1d, s5m,
+            combinedScore,
+            t1d, t5m,
+            r1d, r5m,
+            p1d: p1d.l, p5m: p5m.l, p5mSig: p5m.s,
+            v5mLabel: v5m.l,
+            risk,
+            plan,
+            lastPrice,
+            nearSupports,
+            nearResistances,
+            btcRisk: btcContext.veto ? `BTC zayıf (1s ${btcContext.chg1h.toFixed(2)}%)` : null,
+            warningNote: null
+          });
+        }
+      } catch(e) {
+        // sessiz geç
+      }
+      done++;
+      progressEl.innerHTML = `<div class="scan-progress"><div class="step">3/5 · Tarama: ${done}/${total}</div><div class="detail">${results.length} fırsat bulundu</div></div>`;
+    }));
+    // Her batch sonunda canlı render
+    renderOpportunities(false);
+  }
+
+  // Step 4: Final render
+  results.sort((a,b) => b.combinedScore - a.combinedScore);
+  const top = results.slice(0, SCANNER_CONFIG.maxResults);
+
+  progressEl.style.display = 'none';
+  scannerData = { lastRun: new Date(), opportunities: top, stats: { scanned: total, found: results.length }};
+
+  // Arşive kaydet (sadece fırsat varsa)
+  if (top.length > 0) {
+    saveScanResultsToArchive(top, { scanned: total, found: results.length });
+  }
+
+  statsEl.innerHTML = `
+    <div class="scanner-stats">
+      <div class="stat-row"><span class="label">Taranan coin</span><span class="value">${total}</span></div>
+      <div class="stat-row"><span class="label">Kriterleri geçen</span><span class="value" style="color:var(--bull)">${results.length}</span></div>
+      <div class="stat-row"><span class="label">Gösterilen</span><span class="value">${top.length} (en yüksek skor)</span></div>
+      <div class="stat-row"><span class="label">Son tarama</span><span class="value" style="font-size:11px">${scannerData.lastRun.toLocaleTimeString('tr-TR')}</span></div>
+    </div>
+  `;
+
+  if (top.length === 0) {
+    oppEl.innerHTML = `
+      <div class="empty">
+        🔍 Şu an kriterlere uyan fırsat yok.<br>
+        <span style="font-size:11px">Piyasa pump modunda olabilir veya genel zayıflık var. Birkaç dakika sonra tekrar tara.</span>
+      </div>
+    `;
+    document.getElementById('updated').textContent = 'Tarama: ' + new Date().toLocaleTimeString('tr-TR');
+    return;
+  }
+
+  // Final live stats güncellemesi
+  if (oppListReady) {
+    document.getElementById('liveStats').innerHTML = `
+      <div class="stat-row"><span class="label">✅ Tarama tamamlandı</span><span class="value">${total}/${total}</span></div>
+      <div class="stat-row"><span class="label">Kriterleri geçen</span><span class="value" style="color:var(--bull)">${results.length}</span></div>
+      <div class="stat-row"><span class="label">Son tarama</span><span class="value" style="font-size:11px">${scannerData.lastRun.toLocaleTimeString('tr-TR')}</span></div>
+    `;
+    document.getElementById('oppList').innerHTML = top.map((opp, idx) => buildOpportunityCard(opp, idx)).join('');
+  } else {
+    oppEl.innerHTML = top.map((opp, idx) => buildOpportunityCard(opp, idx)).join('');
+  }
+
+  document.getElementById('updated').textContent = 'Tarama: ' + new Date().toLocaleTimeString('tr-TR');
+}
+
+// ── OPPORTUNITY CARD BUILDER ──────────────────────────────
+function buildOpportunityCard(opp, idx) {
+  const p = opp.plan;
+  const supRows = opp.nearSupports.length > 0
+    ? opp.nearSupports.map(s => {
+        const distPct = ((opp.lastPrice - s.price)/opp.lastPrice*100).toFixed(2);
+        const strength = '●'.repeat(Math.min(s.strength, 3));
+        return `<div class="level-row sup"><span>${fmtPrice(s.price)}</span><span class="dist">-${distPct}%</span><span class="strength">${strength}</span></div>`;
+      }).join('')
+    : '<div class="level-row" style="color:var(--muted)">Yakın destek bulunamadı</div>';
+
+  const resRows = opp.nearResistances.length > 0
+    ? opp.nearResistances.map(r => {
+        const distPct = ((r.price - opp.lastPrice)/opp.lastPrice*100).toFixed(2);
+        const strength = '●'.repeat(Math.min(r.strength, 3));
+        return `<div class="level-row res"><span>${fmtPrice(r.price)}</span><span class="dist">+${distPct}%</span><span class="strength">${strength}</span></div>`;
+      }).join('')
+    : '<div class="level-row" style="color:var(--muted)">Yakın direnç bulunamadı</div>';
+
+  const rankBadge = (idx !== null && idx !== undefined)
+    ? `<span class="opp-rank">#${idx+1}</span>` : '';
+
+  return `
+    <div class="opp-card">
+      <div class="opp-head">
+        <div>
+          ${rankBadge}
+          <span class="opp-sym">${opp.symbol}</span>
+          <span class="src-badge" style="margin-left:4px">24s ${opp.chg24h>=0?'+':''}${opp.chg24h.toFixed(2)}%</span>
+        </div>
+        <span class="risk-badge ${opp.risk.cls}">Risk: ${opp.risk.l} (%${opp.risk.pct})</span>
+      </div>
+
+      <div class="opp-scores">
+        <div class="opp-score-pill">
+          <div class="lbl">1D Skor</div>
+          <div class="num" style="color:${opp.s1d>=60?'var(--bull)':opp.s1d<=40?'var(--bear)':'var(--neut)'}">${opp.s1d}</div>
+        </div>
+        <div class="opp-score-pill">
+          <div class="lbl">5m Skor</div>
+          <div class="num" style="color:${opp.s5m>=60?'var(--bull)':opp.s5m<=40?'var(--bear)':'var(--neut)'}">${opp.s5m}</div>
+        </div>
+        <div class="opp-score-pill">
+          <div class="lbl">Birleşik</div>
+          <div class="num" style="color:var(--accent)">${opp.combinedScore.toFixed(0)}</div>
+        </div>
+      </div>
+
+      <div class="levels-grid">
+        <div class="levels-col">
+          <div class="levels-title res-title">🔴 Direnç (Hedef)</div>
+          ${resRows}
+        </div>
+        <div class="levels-col">
+          <div class="levels-title sup-title">🟢 Destek (Giriş)</div>
+          ${supRows}
+        </div>
+      </div>
+
+      <div class="trade-plan">
+        <div class="trade-plan-title">📋 Önerilen İşlem Planı</div>
+        <div class="trade-row"><span class="k">Mevcut fiyat</span><span class="v">${fmtPrice(opp.lastPrice)}</span></div>
+        <div class="trade-row" style="background:rgba(251,191,36,.08);margin:4px -4px;padding:6px;border-radius:4px">
+          <span class="k" style="color:var(--accent);font-weight:700">🎯 Tahmini Giriş</span>
+          <span class="v" style="color:var(--accent)">${fmtPrice(p.entry)} ${p.waitForPullback ? '(bekle)' : ''}</span>
+        </div>
+        <div class="trade-row" style="font-size:11px;color:var(--muted);margin-top:-2px">
+          <span></span><span>${p.entryNote || ''}</span>
+        </div>
+        <div class="trade-row"><span class="k">Stop-loss</span><span class="v" style="color:var(--bear)">${fmtPrice(p.stop)} (${p.stopPct}%)</span></div>
+        ${p.t1 ? `
+          <div class="trade-row"><span class="k">🎯 T1 <span style="font-size:10px;color:var(--muted)">${p.t1Note}</span></span><span class="v" style="color:var(--bull)">${fmtPrice(p.t1)} (+${p.t1Pct}%)</span></div>
+          <div class="trade-row"><span class="k">🎯 T2 <span style="font-size:10px;color:var(--muted)">${p.t2Note}</span></span><span class="v" style="color:var(--bull)">${fmtPrice(p.t2)} (+${p.t2Pct}%)</span></div>
+          <div class="trade-row"><span class="k">🎯 T3 <span style="font-size:10px;color:var(--muted)">${p.t3Note}</span></span><span class="v" style="color:var(--bull)">${fmtPrice(p.t3)} (+${p.t3Pct}%)</span></div>
+        ` : `
+          <div class="trade-row"><span class="k">Hedef (${p.targetNote})</span><span class="v" style="color:var(--bull)">${fmtPrice(p.target)} (+${p.targetPct}%)</span></div>
+        `}
+        <div class="trade-row"><span class="k">R:R (T2'ye)</span><span class="v" style="color:var(--accent)">1 : ${p.rr}</span></div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:6px;font-size:11.5px;color:var(--muted)">
+        <div>📈 1D: ${opp.t1d.l} · RSI ${opp.r1d}</div>
+        <div>⏱️ 5m: ${opp.t5m.l} · RSI ${opp.r5m}</div>
+        <div>🕯️ Formasyon: <span style="color:${opp.p5mSig === 'bull' ? 'var(--bull)' : opp.p5mSig === 'bear' ? 'var(--bear)' : 'var(--neut)'}">${opp.p5m}</span></div>
+        <div>📊 Hacim: ${opp.v5mLabel}</div>
+      </div>
+
+      ${opp.btcRisk ? `
+        <div style="margin-top:8px;font-size:11.5px;color:var(--bear);background:rgba(239,68,68,.08);padding:6px 8px;border-radius:4px;border-left:2px solid var(--bear)">
+          🚨 <strong>BTC Riski:</strong> ${opp.btcRisk}. BTC düşerken alt coinlere LONG riskli.
+        </div>
+      ` : ''}
+
+      ${opp.warningNote ? `
+        <div style="margin-top:8px;font-size:11.5px;color:var(--bear);background:rgba(239,68,68,.08);padding:6px 8px;border-radius:4px;border-left:2px solid var(--bear)">
+          ${opp.warningNote}
+        </div>
+      ` : ''}
+
+      ${opp.risk.factors.length > 0 ? `
+        <div style="margin-top:8px;font-size:11px;color:var(--warn)">
+          ⚠️ ${opp.risk.factors.join(' · ')}
+        </div>
+      ` : ''}
+    </div>
+  `;
+}
+
+loadAll();
+renderArchive();
+
+// ── PROXY MODAL ────────────────────────────────────────────
+function openProxySettings() {
+  document.getElementById('proxyModal').style.display = 'flex';
+  document.getElementById('proxyCodetabs').checked = PROXY_MODE === 'codetabs';
+  document.getElementById('proxyCustom').checked = PROXY_MODE === 'custom';
+  document.getElementById('customProxyInput').value = CUSTOM_PROXY_URL;
+  document.getElementById('proxyTestResult').textContent = '';
+  // Eğer henüz URL yoksa input'a focus
+  if (!CUSTOM_PROXY_URL) {
+    setTimeout(() => document.getElementById('customProxyInput').focus(), 200);
+  }
+}
+function switchProxyMode(mode) {
+  document.getElementById('proxyCodetabs').checked = (mode === 'codetabs');
+  document.getElementById('proxyCustom').checked = (mode === 'custom');
+}
+function closeProxySettings() {
+  document.getElementById('proxyModal').style.display = 'none';
+}
+function copyWorkerCode() {
+  const code = document.getElementById('workerCode').textContent;
+  navigator.clipboard.writeText(code).then(() => {
+    alert('✅ Worker kodu kopyalandı! Cloudflare editörüne yapıştır.');
+  });
+}
+async function testProxy() {
+  const url = document.getElementById('customProxyInput').value.trim().replace(/\/$/, '');
+  const result = document.getElementById('proxyTestResult');
+  if (!url) { result.innerHTML = '<span style="color:var(--bear)">❌ URL boş</span>'; return; }
+  result.innerHTML = '<span style="color:var(--accent)">⏳ Test ediliyor...</span>';
+  try {
+    const testUrl = `${url}/fapi/v1/klines?symbol=BTCUSDT&interval=5m&limit=2`;
+    const t0 = performance.now();
+    const r = await fetch(testUrl);
+    const dt = Math.round(performance.now() - t0);
+    if (!r.ok) {
+      result.innerHTML = `<span style="color:var(--bear)">❌ HTTP ${r.status} (${dt}ms)</span>`;
+      return;
+    }
+    const data = await r.json();
+    if (Array.isArray(data) && data.length > 0) {
+      result.innerHTML = `<span style="color:var(--bull)">✅ Çalışıyor! ${dt}ms</span>`;
+    } else {
+      result.innerHTML = `<span style="color:var(--bear)">❌ Beklenmedik yanıt</span>`;
+    }
+  } catch(e) {
+    result.innerHTML = `<span style="color:var(--bear)">❌ ${e.message}</span>`;
+  }
+}
+function saveProxySettings() {
+  // Hangi mode seçili — direkt input'tan oku
+  const customChecked = document.getElementById('proxyCustom').checked;
+  const mode = customChecked ? 'custom' : 'codetabs';
+  const customUrl = document.getElementById('customProxyInput').value.trim().replace(/\/$/, '');
+  if (mode === 'custom' && !customUrl) {
+    alert('Custom modu seçtin ama URL girmedin. Cloudflare Worker URL\'ni gir (örn. https://binance-proxy.kullanici.workers.dev)');
+    document.getElementById('customProxyInput').focus();
+    return;
+  }
+  PROXY_MODE = mode;
+  CUSTOM_PROXY_URL = customUrl;
+  localStorage.setItem('proxyMode', mode);
+  localStorage.setItem('customProxyUrl', customUrl);
+  closeProxySettings();
+  if (currentPage === 'watch') loadAll();
+  else if (currentPage === 'scanner') runScanner();
+}
+
+setInterval(() => {
+  if (currentPage === 'watch') loadAll();
+  // Scanner manuel kalsın, otomatik tarama proxy rate-limit yer
+}, 60000);
+</script>
+<!-- Proxy Settings Modal -->
+<div id="proxyModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:1000;align-items:flex-start;justify-content:center;overflow-y:auto;padding:20px">
+  <div style="background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:20px;max-width:560px;width:100%;margin-top:40px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <h2 style="margin:0;font-size:18px">⚙️ Proxy Ayarları</h2>
+      <button onclick="closeProxySettings()" style="background:transparent;border:none;color:var(--muted);font-size:24px;cursor:pointer">×</button>
+    </div>
+
+    <div style="background:rgba(34,211,238,.05);border:1px solid rgba(34,211,238,.2);padding:10px;border-radius:8px;margin-bottom:14px;font-size:12.5px;line-height:1.5">
+      <strong style="color:var(--info)">ℹ️ Codetabs vs Custom Worker</strong><br>
+      <span style="color:var(--muted)">
+        <strong>Codetabs</strong> (varsayılan): Ücretsiz, paylaşımlı. Yoğun zamanda rate-limit yer.<br>
+        <strong>Custom</strong>: Kendi Cloudflare Worker'ın. Hiç rate-limit yok, 5 dk'da kurulur, ücretsiz.
+      </span>
+    </div>
+
+    <div style="margin-bottom:14px">
+      <label style="display:flex;align-items:center;gap:8px;padding:10px;background:var(--panel-2);border-radius:8px;cursor:pointer;margin-bottom:6px">
+        <input type="radio" name="proxyMode" value="codetabs" id="proxyCodetabs">
+        <div>
+          <div style="font-weight:700;font-size:13px">Codetabs (varsayılan)</div>
+          <div style="font-size:11px;color:var(--muted)">⚠️ IP banlı — şu an çalışmıyor</div>
+        </div>
+      </label>
+      <label style="display:flex;align-items:center;gap:8px;padding:10px;background:var(--panel-2);border-radius:8px;cursor:pointer">
+        <input type="radio" name="proxyMode" value="custom" id="proxyCustom">
+        <div>
+          <div style="font-weight:700;font-size:13px">Custom Worker (önerilen)</div>
+          <div style="font-size:11px;color:var(--muted)">Kendi Cloudflare Worker'ın · sınırsız</div>
+        </div>
+      </label>
+    </div>
+
+    <div id="customProxyConfig" style="background:rgba(251,191,36,.05);border:1px solid rgba(251,191,36,.2);padding:12px;border-radius:8px;margin-bottom:14px">
+      <label style="display:block;font-size:12px;font-weight:600;margin-bottom:6px;color:var(--accent)">📍 Worker URL'i (Custom modu için):</label>
+      <input id="customProxyInput"
+             placeholder="https://binance-proxy.kullanici.workers.dev"
+             style="width:100%;background:var(--panel-2);border:1px solid var(--border);color:var(--text);padding:9px 11px;border-radius:6px;font-family:'JetBrains Mono',monospace;font-size:12px;margin-bottom:10px;box-sizing:border-box">
+      <button onclick="testProxy()" style="background:var(--accent);color:#0a0a0f;border:none;padding:6px 14px;border-radius:6px;font-weight:700;cursor:pointer;font-size:12px;margin-right:6px">🧪 Test Et</button>
+      <span id="proxyTestResult" style="font-size:12px"></span>
+
+      <details style="margin-top:14px">
+        <summary style="cursor:pointer;font-size:12px;color:var(--accent);font-weight:600">📘 Cloudflare Worker nasıl kurulur? (5 dk)</summary>
+        <div style="background:rgba(255,255,255,.02);padding:10px;border-radius:6px;margin-top:8px;font-size:12px;line-height:1.6;color:var(--muted)">
+          <ol style="padding-left:18px;margin:0">
+            <li><strong>cloudflare.com</strong> → ücretsiz hesap aç</li>
+            <li>Sol menü → <strong>Workers & Pages</strong> → <strong>Create</strong> → <strong>Create Worker</strong></li>
+            <li>İsim: <code>binance-proxy</code> → <strong>Deploy</strong></li>
+            <li><strong>Edit code</strong> → kodu sil, aşağıdaki kodu yapıştır → <strong>Save and Deploy</strong></li>
+            <li>Sana verilen URL'i yukarıya yapıştır</li>
+            <li><strong>🧪 Test Et</strong>'e bas, ✅ yeşil görmen lazım</li>
+            <li>Üstten <strong>Custom Worker</strong> seç → <strong>Kaydet ve Yenile</strong></li>
+          </ol>
+          <div style="margin-top:10px;font-weight:600;color:var(--text)">Worker kodu:</div>
+          <pre style="background:#0a0a0f;border:1px solid var(--border);padding:8px;border-radius:4px;font-size:10.5px;overflow-x:auto;margin-top:4px;color:var(--text)"><code id="workerCode">export default {
+  async fetch(request) {
+    const url = new URL(request.url);
+    if (request.method === 'OPTIONS') {
+      return new Response(null, {
+        headers: {
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Methods': 'GET, OPTIONS',
+        }
+      });
+    }
+    let target;
+    if (url.pathname.startsWith('/fapi/')) {
+      target = 'https://fapi.binance.com' + url.pathname + url.search;
+    } else if (url.pathname.startsWith('/api/')) {
+      target = 'https://api.binance.com' + url.pathname + url.search;
+    } else {
+      return new Response('OK', { headers: { 'Access-Control-Allow-Origin': '*' }});
+    }
+    try {
+      const upstream = await fetch(target);
+      const body = await upstream.text();
+      return new Response(body, {
+        status: upstream.status,
+        headers: {
+          'Content-Type': upstream.headers.get('Content-Type') || 'application/json',
+          'Access-Control-Allow-Origin': '*',
+        }
+      });
+    } catch(e) {
+      return new Response(JSON.stringify({error: e.message}), {
+        status: 502,
+        headers: { 'Content-Type':'application/json', 'Access-Control-Allow-Origin': '*' }
+      });
+    }
+  }
+};</code></pre>
+          <button onclick="copyWorkerCode()" style="background:var(--accent);color:#0a0a0f;border:none;padding:4px 10px;border-radius:4px;font-weight:700;cursor:pointer;font-size:11px;margin-top:4px">📋 Kodu Kopyala</button>
+        </div>
+      </details>
+    </div>
+
+    <div style="margin-top:14px;display:flex;gap:8px;justify-content:flex-end">
+      <button onclick="closeProxySettings()" style="background:transparent;border:1px solid var(--border);color:var(--text);padding:8px 14px;border-radius:6px;cursor:pointer;font-family:inherit;font-size:12px">İptal</button>
+      <button onclick="saveProxySettings()" style="background:var(--accent);color:#0a0a0f;border:none;padding:8px 14px;border-radius:6px;font-weight:700;cursor:pointer;font-family:inherit;font-size:12px">💾 Kaydet ve Yenile</button>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>
